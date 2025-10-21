@@ -1,0 +1,113 @@
+---
+title: "Hipergeométrica"
+author: "Romano"
+format: html
+editor: visual
+---
+
+```{=html}
+<style>
+main.content {
+text-align: justify}
+</style>
+```
+
+DISTRIBUCIÓN HIPERGEOMETRICA
+
+Esta distribución de probabilidad surge en el contexto de la toma de una muestra de un conjunto de objetivos de dos tipos. Supongamos que tenemos N articulos dentro de un recipiente, de los cuales K son de un primer tipo y N - K son de un segundo tipo. Los articulos del primer tipo pueden corresponder a articulos en un buen estado y los del segundo tipo a artículos en un mal estado. Ahora supongamos que en el recipiente tomamos al azar una muestra de tamaño n de tal forma que la selección es sin reemplazo y el orden de los articulos seleccionados no es relevante, Asi que podemos deci que el espacio muestral de este experimento consiste de todos los posibles subconjuntos de tamaño n que se pueden obtener de esta coleción de N articulos y su cardinalidad es entonces (N n). Si para cada ubconjunto seleccionado se define la variable aleatoria X como el número de articulos seleccionados que son del primer tipo, entonces es claro que X puede tomar los valores 0, 1, 2,...n
+
+Para entender la fórmula de la función de probabilidad de esta distribución observe que término (K x) establece las diferentes formas en que x objetos pueden escogerse de la colección de K objetos del tipo 1, mientras que el término (N-K/n-x) corresponde a las diferentes formas de escoger n-x objetos de los N-K objetos del tipo 2. Se usa entonces el principio multiplicatio para obtener el número total de muestras diferentes, en donde x articulos son del primer tipo y n-x articulos son del segundo tipo. No es un ejercicio fáil verificar que esta función de probabilidad efectivamente lo es.
+
+Se pueden obteneer los valors de f(x).
+
+```{r}
+#dhyper(x,K,N-K,n) evalúa f(x) de la ddistricución 
+#hipergeo(N,K,n)
+dhyper(3,7,13,5) # d = ddensity
+
+```
+
+Observe las diferencia en el orden y la forma de expresarlos párametros de esta distribución en r: después del argumento x se especifica el número de objetivos K de tipo 1, despúes el número de articulos N-K de tipo 2 y finalmente se especifica el tamaño de la muestra n.
+
+Se puede obtener los valores de la función de distribución f(x), pero no presentaremos la formula porque esta no tiene una expresión compacta sencilla.
+
+```{r}
+# phyper(x,K,N-K,n) evalúa F(x) de la distribución
+#hipergeo(N,K,n)
+phyper(3,7,13,5)  #p = probability distribution function
+```
+
+El siguiente comando puede obtener valores seudoalatorios de la distribución hipergeometrica, Asigne usted valores a los parámetros N,K y n. Genere tantos valores de esta distribución como desee modificando de valor de K.
+
+```{r}
+# RHYPER(K,k,n-k,N) genera k valores al azar de la distribución
+# hipergeo(N,K,n)
+rhyper(25,7,13,5)  # r = random
+```
+
+EJERCICIO Demuestre que la función de probabilidad de la distribución hipergeométrica efectivamente es una función de probabilidad.
+
+Una fábrica produce 75 carros, de los cuales 4 de estos tienen defectos de fábrica. El euipo de calidad selecciona aleatoriamente 21 carros para inspeccionar.
+
+```{r}
+# Función que calcula la distribución hipergeometrica.
+
+hipergeometrica <- function(N, K,n, x) {choose(K, x) * choose(N - K, n-x) / choose(N, n)}
+
+#Paramétros del problema
+N <- 75 #Total de carros
+K <- 4  #Carros defectuosos
+n <- 21 #Carros inspeccionados
+x <- 0:n #Exitos en la la inspección
+
+#Calcular la probabilidad
+probabilidades <- sapply(x, function(x) hipergeometrica(N, K, n, x))
+#Crear un data frame 
+df <- data.frame(x = x, probabilidad = probabilidades)
+#Grafica
+ggplot(df, aes(x = x, y = probabilidad)) + geom_bar(stat = "identity", fill = "pink", color = "tomato" )
+labs(titulo = "DISTRIBUCION HIPERGEOMETRICA", x = "Numero de exitos en la inspección (x)", y = "Probabilidad P(X = x)") + 
+  theme_minimal()
+
+
+```
+
+```{r}
+N <- 75   
+K <- 4    
+n <- 21   
+
+# Función de distribución hipergeométrica
+hipergeometrica <- function(N, K, n, x) {
+  choose(K, x) * choose(N - K, n - x) / choose(N, n)
+}
+
+# Valores posibles de x (carros defectuosos encontrados)
+x <- 0:K  # Puede encontrar de 0 a 4 carros defectuosos
+
+# Calcular probabilidades
+probabilidades <- sapply(x, function(i) hipergeometrica(N, K, n, i))
+
+# Crear tabla de probabilidad
+tabla <- data.frame(
+  `x (Defectuosos)` = x,
+  `P(X = x)` = round(probabilidades, 6),
+  `P(X ≤ x)` = round(cumsum(probabilidades), 6),
+  `% Probabilidad` = paste0(round(probabilidades * 100, 2), "%")
+)
+
+# Mostrar encabezado del problema
+cat("PROBLEMA: INSPECCIÓN DE CALIDAD - FÁBRICA DE CARROS\n")
+cat("Total de carros producidos (N):", N, "\n")
+cat("Carros con defectos (K):", K, "\n")
+cat("Carros inspeccionados (n):", n, "\n")
+
+
+# Mostrar tabla de probabilidad
+cat("TABLA DE PROBABILIDAD HIPERGEOMÉTRICA\n")
+print(tabla, row.names = FALSE)
+cat("=====================================================\n")
+cat("SUMA TOTAL: P(X = x) =", sum(probabilidades), "✓\n\n")
+
+
+```
