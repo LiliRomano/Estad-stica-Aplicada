@@ -1,0 +1,522 @@
+---
+title: "Proyecto econometría"
+author: "Briones Domínguez Saraí Belem. Romano García Lilian. Zamora Pérez Andrea Anaeli"
+editor: visual
+---
+
+------------------------------------------------------------------------
+
+Packages a utilizar
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tseries)
+library(car)
+```
+
+# Introducción
+
+Este proyecto surge como una aplicación práctica de los conocimientos adquiridos en clase. A través de la aplicación de las técnicas econométricas- como lo es la regresión simple y multiple- buscamos relacionar la participación de las mujeres en la economía y el Producto Interno Bruto (PIB), cuantificando el su impacto a través de variables que engloban la esfera privada y pública.
+
+La incorporación de las mujeres en el mercado laboral y su participación activa de manera progresiva en la economía tienen un impacto directo en la productividad y en una mejor repartición de la riqueza, es por eso que dentro de nuestro modelo contemplamos variables como la tasa de participación femenina en la fuerza laboral y la brecha salarial, así como el porcentaje de mujeres en puestos directivos ya que no solo implica su participación sino estar en puestos de toma de decisiones. Contemplando las politicas públicas que faciliten este involucramiento tomamos como variable el presupuesto con perspectiva de género implementado en 2015 que tiene como objetivo destinar parte del Presupuesto de Egresos a programas que cierren la brecha de género.
+
+Este análisis pretende mostrar que elinvolucramiento de las mujeres es un factor clave para un desarrollo sostenible, así como la importancia de políticas públicas que respalden la igualdad de género como una estrategia para el crecimiento ecónomico del país.
+
+**Objetivo general** Demostrar la relación entre el crecimiento del PIB y la participación de la mujer en la economía.
+
+**Objetivos especificos**
+
+-   Crear un modelo económico que explique el impacto de la inclusión de la mujer en el PIB.
+-   Aplicar los conocimientos adquiridos en clase durante el segundo parcial.
+
+**Hipótesis** Una mayor participación femenina en el mercado laboral, con puestos directivos impulsado por políticas públicas que ayuden a cerrar la brecha de género tiene un impacto positivo en el PIB.
+
+# Marco teórico
+
+**PIB (precios actuales)**
+
+El Producto Interior Bruto (PIB) mide el valor de todos los bienes y servicios producidos en un período normalmente de un año en una economía. El PIB es un indicador que se utiliza para conocer la riqueza que genera un país. El PIB se calcula trimestralmente, aunque el dato que se utiliza para medir el tamaño de una economía y realizar comparaciones entre países es el PIB anual. Para este ejercicio se utilizará un PIB nominal que es el valor a precios de mercado, de la producción de bienes y servicios finales producidos durante un determinado periodo de PIB nominal.
+
+**Tasa de participación femenina**
+
+De acuerdo con datos de la Encuesta Nacional para el Sistema de Cuidados (ENASIC) del Instituto Nacional de Estadística y Geografía (INEGI), en México 58.3 millones de personas requieren cuidados, incluyendo a infantes, personas con discapacidad, adolescentes y adultos mayores, sin embargo, tres de cada cuatro personas que brindan estos cuidados son mujeres de 15 años o más, quienes dedican en promedio 38.9 horas semanales a estas actividades. A la fecha aún existen sectores masculinizados en los que la participación de las mujeres sigue siendo baja. Un ejemplo es el sector automotriz, que ha experimentado un crecimiento notable en México en los últimos años y de acuerdo con los Censos Económicos del INEGI, en 2008, la participación de las mujeres en la industria manufacturera representaba apenas el 35.1% y para 2016 este porcentaje aumentó sólo a 36.9%. Con estos antecedentes entendemos que debe de haber un llamado al sector privado, la academia y al sector social para sumarse a las iniciativas de forma decidida y activa para reafirmar el compromiso con la equidad de género y la inclusión en el sector productivo, avanzando hacia un modelo de desarrollo más justo y sostenible.
+
+**Presupuesto con perspectiva de género.**
+
+La Ley de Planeaión y la Ley Federal de Presupuesto y Responsabilidad Hacendaria incluyen, una perpestiva de género en los presupuestos públicos como un criterio central para el diseño, desarrollo y evaluación de las acciones públicas. Estas reformas han constituido un significante avance para el logro de la igualdad sustantiva entre mujeres y hombres.
+
+**Brecha salarial**
+
+Se conoce como brecha salarial entre hombres y mujeres a la diferencia existente entre los salarios percibidos por los trabajadores de ambos sexos, calculada sobre la base de la diferencia media entre los ingresos brutos por hora de todos los trabajadores. Por ejemplo, en promedio, las mujeres de EEUU ganan alrededor de un 16 % menos por hora que los hombres.
+
+**Puestos de alta dirección ocupados por mujeres.**
+
+La presencia de mujeres en puestos de alta dirección en México sigue subiendo, alcanzando un 38.9% en 2025, este gran avance ubica a México en el sexto lugar a nivel global en la participación femenina en liderazgo corporativo, manteniendo una tendencia de crecimiento sostenido en los últimos años: En 2024 un 36.2%, en 2023 un 38% y en el 2022 un 32.6%.
+
+Cabe resaltar que la paridad de género en los altos mandos aún están a una generación de distancia. Es esencial tomar medidas e incentivar la presencia y el liderazgo de las mujeres en las empresas mexicanas.
+
+**Regresión lineal simple**
+
+Describe la relaión entre variables ajustando una línea a los datos observados. Los modelos de regresión lineal utilizan una línea recta, mientras que los modelos de regresión logística y no líneal utilizan una línea curva. La regresión permite estimar cómo cambia una variables dependiente al cambiar las variables independientes.
+
+$$
+y=\beta_0+\beta_1X+ \epsilon
+$$
+
+**Regresión múltiple matricial**
+
+Es una técnica estadística que utiliza varías variables explicativas para predecir el resultado de una variable de respuesta. El objetivo de la RLM es modelar la relación lineal entre las variables independientes y las variables dependientes.
+
+$$
+\beta = (X^{T}X)^{-1}X^{T}Y
+$$
+
+**Modelo LOG-LIN**
+
+Son modelos estadísticos que expresan la relación entre variables de respuesta categóricas y variables latentes mediante una transformación logarítmica, lo que permite parametrizar las probabilidades de respuesta en diferentes categorías.
+
+**Función de producciónCobb-Douglas**
+
+La fúncion de producción es la relación existente entre la cantidad de factores utilizados para producir y la catidad de producción. A nivel agregado o país, se considera como factores productivos las horas trabajadas efectivas y el capital utilizado, conjuntamente con la tecnología disponible para transformar los servicios de ambos factores productivos en producto (PIB). Esta producción de producción, que relaciona factores productivos con producción, tiene una formulación matemática. La función de producción Cobb-Douglas, es una especificación matemática particular, que cumple una serie de propiedades.
+
+**Error**
+
+El termino de error muestra la diferencia entre lo que predice un modelo y lo que realmente sucede. Existe porque los modelos no pueden capturar todos los factores que afectan el resultado. Tambien este termino lo conocemos como residuo o perturbación, se suele representar en una ecuación con símbolos como:
+
+$$
+e,  \epsilon, u 
+$$
+
+**R-cuadrada**
+
+Es una medida estadística que examina cómo las diferencias en una variable pueden ser explicadas por la diferencia en una segunda variables, al predecir el resultado de un evento determinado.
+
+**Homocedasticidad y heterocedasticidad**
+
+Homo (igual) cedasticidad (dispersión): Igual varianza. Para determinarla se usa la **Prueba de Park**: $$
+\sigma_i^2 = \sigma^2 X_i^{\beta} e^{v_i}
+$$
+
+$$
+\ln(\sigma_i^2) = \ln(\sigma^2) + \beta \ln(X_i) + v_i
+$$
+
+**Prueba de Chow**
+
+La prueba de Chow se usa para detectar inestabilidad en los parámetros de la regresión al dividir la muestra en subperiodos. Ambos subperiodos deben tener la misma varianza (homoscedástica).
+
+# Metodología
+
+Realizamos un análisis de regresión lineal (AR) con las variables “PIB (precios actuales)” en el eje Y y “Tasa de participación femenina”, “Brecha salarial”, “Puestos de alta dirección ocupados por mujeres” en el eje de las X para así realizar un ejercicio donde se logre observar la correlación entre las variables y su impacto en el PIB nacional.
+
+# Cargar datos
+
+```{r}
+datos <- read.csv("DATA.csv")
+colnames(datos) <- c("Año", "PIB", "Tasa_participacion", "Presupuesto", 
+                     "Brecha_salarial", "Puestos_direccion")
+colnames(datos)
+head(datos)
+```
+
+```{r}
+summary(datos)
+```
+
+# Regresión lineal simple
+
+## Y=PIB, X=Tasa de participación femenina
+
+```{r}
+# MODELO 1: PIB explicado por Tasa de participación femenina
+modelo1 <- lm(PIB ~ Tasa_participacion, data = datos)
+summary(modelo1)
+```
+
+```{r}
+# Gráfico M1
+ggplot(datos, aes(x = Tasa_participacion, y = PIB)) +
+  geom_point(color = "#CDAA7D", alpha = 0.6, size = 3) +
+  geom_smooth(method = "lm", se = TRUE, color = "#6E8B3D", fill = "#6E8B3D", alpha = 0.2) +
+  geom_text(aes(label = Año), hjust = -0.3, vjust = -0.3, size = 3, color = "gray40") +
+  labs(title = "PIB vs Tasa de Participación Femenina",
+       x = "Tasa de participación femenina (%)",
+       y = "PIB (Miles de millones US$)") +
+  theme_minimal()
+```
+
+```{r}
+coef_modelo1 <- summary(modelo1)$coefficients
+r_squared1 <- summary(modelo1)$r.squared
+
+cat("Ecuación estimada:\n")
+cat(sprintf("PIB = %.2f + %.2f * Tasa_participacion\n", 
+            coef_modelo1[1,1], coef_modelo1[2,1]))
+cat(sprintf("R^2 = %.4f (El modelo explica %.2f%% de la variabilidad del PIB)\n", 
+            r_squared1, r_squared1*100))
+```
+
+## Y=PIB, X=Puestos de alta dirección
+
+```{r}
+#MODELO 2: PIB explicado por Puestos de alta dirección (mujeres)
+modelo2 <- lm(PIB ~ Puestos_direccion, data = datos)
+summary(modelo2)
+```
+
+```{r}
+# Gráfico
+ggplot(datos, aes(x = Puestos_direccion, y = PIB)) +
+  geom_point(color = "#B8860B", alpha = 0.6, size = 3) +
+  geom_smooth(method = "lm", se = TRUE, color = "#8B4513", fill = "#8B4513", alpha = 0.2) +
+  geom_text(aes(label = Año), hjust = -0.3, vjust = -0.3, size = 3, color = "gray40") +
+  labs(title = "PIB vs Puestos de Alta Dirección (Mujeres)",
+       x = "Puestos de alta dirección ocupados por mujeres (%)",
+       y = "PIB (Miles de millones US$)") +
+  theme_minimal()
+```
+
+```{r}
+coef_modelo2 <- summary(modelo2)$coefficients
+r_squared2 <- summary(modelo2)$r.squared
+
+cat("Ecuación estimada:\n")
+cat(sprintf("PIB = %.2f + %.2f * Puestos_direccion\n", 
+            coef_modelo2[1,1], coef_modelo2[2,1]))
+cat(sprintf("R^2 = %.4f (El modelo explica %.2f%% de la variabilidad del PIB)\n", 
+            r_squared2, r_squared2*100))
+```
+
+```{r}
+#Gráficos de diagnóstico
+
+# Modelo 1
+par(mfrow = c(2, 2))
+plot(modelo1, main = "Diagnóstico Modelo 1")
+
+# Modelo 2
+par(mfrow = c(2, 2))
+plot(modelo2, main = "Diagnóstico Modelo 2")
+
+```
+
+# Regresión múltiple matricial
+
+$$
+\beta = (X^{T}X)^{-1}X^{T}Y
+$$
+
+```{r}
+# Modelo: PIB ~ Tasa_participacion + Presupuesto + Brecha_salarial + Puestos_direccion
+
+y_mult <- datos$PIB
+x_mult <- datos[, c("Tasa_participacion", "Presupuesto", "Brecha_salarial", "Puestos_direccion")]
+
+Y_mult <- as.matrix(y_mult)
+X_mult <- cbind(1, as.matrix(x_mult))
+colnames(X_mult)[1] <- "Intercepto"
+
+dim(X_mult)
+dim(Y_mult)
+```
+
+## Cálculo de betas
+
+```{r}
+# β = (X'X)⁻¹X'Y
+betas_mult <- solve(t(X_mult) %*% X_mult) %*% t(X_mult) %*% Y_mult
+print("Coeficientes estimados (Regresión Múltiple):")
+betas_mult
+```
+
+```{r}
+#Verificación
+modelo_mult_verificacion <- lm(PIB ~ Tasa_participacion + Presupuesto + Brecha_salarial + Puestos_direccion, 
+                               data = datos)
+print("Verificación con lm():")
+coef(modelo_mult_verificacion)
+```
+
+## Cálculo de r\^2
+
+```{r}
+n_mult <- nrow(X_mult)
+k_mult <- ncol(X_mult)
+
+y_hat_mult <- X_mult %*% betas_mult
+residuos_mult <- Y_mult - y_hat_mult
+
+SSR_mult <- t(residuos_mult) %*% residuos_mult
+SST_mult <- sum((Y_mult - mean(Y_mult))^2)
+
+R2_mult <- 1 - (SSR_mult / SST_mult)
+R2_ajustado_mult <- 1 - (1 - R2_mult) * (n_mult - 1) / (n_mult - k_mult)
+
+print(paste("R^2 (múltiple):", round(R2_mult, 4)))
+print(paste("R^2 ajustado (múltiple):", round(R2_ajustado_mult, 4)))
+```
+
+## Varianza del error
+
+```{r}
+sigma2_mult <- SSR_mult / (n_mult - k_mult)
+print(paste("σ^2 (Regresión múltiple):", round(sigma2_mult, 4)))
+```
+
+## Predicción
+
+```{r}
+comparacion_mult <- data.frame(
+  Año = datos$Año,
+  PIB_real = Y_mult,
+  PIB_predicho = y_hat_mult,
+  Residuo = residuos_mult
+)
+print(comparacion_mult)
+
+plot(Y_mult, y_hat_mult,
+     main = "Regresión Múltiple: Real vs Predicho",
+     xlab = "PIB Real",
+     ylab = "PIB Predicho",
+     col = "#8B4513", pch = 19, cex = 1.5)
+abline(a = 0, b = 1, col = "red", lwd = 2, lty = 2)
+grid()
+```
+
+# Modelo LOG-LIN
+
+```{r}
+datos$LOG_PIB <- log(datos$PIB)
+head(datos)
+```
+
+## Log(PIB)\~Tasa de participación
+
+```{r}
+plot(datos$Tasa_participacion, datos$LOG_PIB, 
+     xlab = 'Tasa de participación femenina (%)', 
+     ylab = 'ln(PIB)',
+     main = 'ln(PIB) vs Participación femenina',
+     col = '#6E8B3D', pch = 19, cex = 1.5)
+grid()
+```
+
+```{r}
+# Modelo LOG-LIN
+modelo_loglin1 <- lm(LOG_PIB ~ Tasa_participacion, data = datos)
+summary(modelo_loglin1)
+```
+
+```{r}
+#Coeficientes
+coef_loglin1 <- coef(modelo_loglin1)
+beta1 <- coef_loglin1[2]
+
+# Interpretación: efecto porcentual en PIB por cada 1% de aumento en participación
+efecto_porcentual <- (exp(beta1) - 1) * 100
+
+cat(sprintf("Ecuación: ln(PIB) = %.4f + %.4f * Tasa_participacion\n\n", 
+            coef_loglin1[1], beta1))
+cat(sprintf("Interpretación:\n"))
+cat(sprintf("Por cada 1%% de AUMENTO en la tasa de participación femenina,\n"))
+cat(sprintf("el PIB aumenta aproximadamente en %.4f%%\n\n", efecto_porcentual))
+
+# R^2
+r2_loglin1 <- summary(modelo_loglin1)$r.squared
+cat(sprintf("R^2 = %.4f (%.2f%% de la variabilidad explicada)\n", 
+            r2_loglin1, r2_loglin1 * 100))
+```
+
+```{r}
+# Gráfico con línea de regresión
+ggplot(datos, aes(x = Tasa_participacion, y = LOG_PIB)) +
+  geom_point(color = "#CDAA7D", alpha = 0.6, size = 3) +
+  geom_smooth(method = "lm", se = TRUE, color = "#6E8B3D", fill = "#6E8B3D", alpha = 0.2) +
+  geom_text(aes(label = Año), hjust = -0.3, vjust = -0.3, size = 3, color = "gray40") +
+  labs(title = "ln(PIB) vs Tasa de Participación Femenina",
+       x = "Tasa de participación femenina (%)",
+       y = "ln(PIB)") +
+  theme_minimal()
+```
+
+## Log(PIB)\~Puestos de alta dirección
+
+```{r}
+modelo_loglin2 <- lm(LOG_PIB ~ Puestos_direccion, data = datos)
+summary(modelo_loglin2)
+```
+
+```{r}
+coef_loglin2 <- coef(modelo_loglin2)
+beta1_dir <- coef_loglin2[2]
+efecto_porcentual_dir <- (exp(beta1_dir) - 1) * 100
+
+cat(sprintf("Por cada 1%% de aumento en puestos de alta dirección ocupados por mujeres,\n"))
+cat(sprintf("el PIB aumenta aproximadamente en %.4f%%\n", efecto_porcentual_dir))
+```
+
+```{r}
+# Gráfico
+ggplot(datos, aes(x = Puestos_direccion, y = LOG_PIB)) +
+  geom_point(color = "#B8860B", alpha = 0.6, size = 3) +
+  geom_smooth(method = "lm", se = TRUE, color = "#8B4513", fill = "#8B4513", alpha = 0.2) +
+  geom_text(aes(label = Año), hjust = -0.3, vjust = -0.3, size = 3, color = "gray40") +
+  labs(title = "Modelo Log-Lin: ln(PIB) vs Puestos de Alta Dirección",
+       x = "Puestos de alta dirección ocupados por mujeres (%)",
+       y = "ln(PIB)") +
+  theme_minimal()
+```
+
+# Cobb-Douglas
+
+```{r}
+# Modelo Cobb-Douglas: ln(PIB) ~ ln(Tasa) + ln(Presupuesto) + ln(Puestos)
+model_cobb <- lm(log(PIB) ~ log(Tasa_participacion) + log(Presupuesto) + log(Puestos_direccion), 
+                 data = datos)
+summary(model_cobb)
+```
+
+## Revisar los coeficientes
+
+```{r}
+coef(model_cobb)
+
+elasticidad_tasa <- coef(model_cobb)[2]
+elasticidad_presupuesto <- coef(model_cobb)[3]
+elasticidad_puestos <- coef(model_cobb)[4]
+
+suma_elasticidades <- elasticidad_tasa + elasticidad_presupuesto + elasticidad_puestos
+```
+
+## Análisis de intérvalos de confianza
+
+```{r}
+confint(model_cobb, level = 0.95)
+intervalos <- confint(model_cobb, level = 0.95)
+```
+
+## Prueba de hipótesis de normalidad
+
+```{r}
+jarque.bera.test(residuals(model_cobb))
+res_ <- residuals(model_cobb)
+
+cat(sprintf("Media de residuos: %.10f\n", mean(res_)))
+cat("(Debe ser aproximadamente 0)\n\n")
+
+# Histograma
+hist(res_, 
+     main = "Distribución de Residuos",
+     xlab = "Residuos",
+     col = "#6E8B3D",
+     border = "white")
+abline(v = 0, col = "red", lwd = 2, lty = 2)
+
+# Gráfico Q-Q para normalidad
+qqnorm(res_, main = "Q-Q Plot: Normalidad de Residuos")
+qqline(res_, col = "red", lwd = 2)
+```
+
+## Prueba de multicolinealidad
+
+```{r}
+vif_values <- vif(model_cobb)
+print("VIF (Factor de Inflación de Varianza):")
+print(vif_values)
+
+for(i in 1:length(vif_values)) {
+  nombre_var <- names(vif_values)[i]
+  valor_vif <- vif_values[i]
+  
+  cat(sprintf("%s: VIF = %.4f\n", nombre_var, valor_vif))
+  
+  if(valor_vif < 5) {
+    cat("  ✓ No hay problema de multicolinealidad\n\n")
+  } else if(valor_vif < 10) {
+    cat("  ⚠ Multicolinealidad MODERADA\n\n")
+  } else {
+    cat("  ✗ Multicolinealidad ALTA (problema serio)\n\n")
+  }
+}
+```
+
+# Prueba de Park
+
+```{r}
+model <- lm(PIB ~ Tasa_participacion + Presupuesto +  Brecha_salarial + Puestos_direccion, data=datos)  
+summary(model)
+```
+
+```{r}
+res <- abs(residuals(model)) 
+datos$residuals <- res 
+datos$residuals2 <- res^2 
+datos$log_tasa_participacion <- log(datos$Tasa_participacion) 
+head(datos)  
+model_Park <- lm(residuals2 ~ log_tasa_participacion, data = datos)  
+
+summary(model_Park)
+```
+
+**Visualización**
+
+```{r}
+ggplot(datos, aes(x = log_tasa_participacion, y = residuals2)) +   
+  geom_point(color = "cadetblue3", size = 3) +
+  geom_smooth(method = "lm", se = TRUE, color = "coral2", linetype = "dashed") +
+  labs(     
+    title = "Test de Park: Varianza de los residuos vs log(Tasa de participación femenina)",     
+    x = "Log(Tasa de participación femenina)",     
+    y = "Residuos al cuadrado"   
+    ) +   
+  theme_minimal(base_size = 14)  
+
+cat("El modelo no tiene heterocedasticidad", "\\n")
+```
+
+# Prueba de Chow
+
+**Punto de quiebre**
+
+```{r}
+punto_quiebre <- breakpoints(PIB ~ Tasa_participacion, data = datos, h = 0.5) 
+summary(punto_quiebre) 
+sctest(datos$PIB ~ datos$Tasa_participacion, type = "Chow", point = 5)
+```
+
+**Visualización**
+
+```{r}
+plot(datos$PIB, datos$Tasa_participacion, col = "#CD1076")
+```
+
+# Resultados
+
+En este modelo la ecuación queda como PIB = -4274.74 + 116.50 \* Tasa_participacion, de esto podemos deducir que por cada 1% que aumenta la tasa de participación femenina, el PIB del país crece en 116.50 mil millones de dólares. El -4274.74 no puede tener una interpretación económica real porque es un valor imposible y se trata solo de un ajuste matemático.
+
+Regresión múltiple: Cuando combinamos todas las variables en un solo modelo, vemos que este explica el 99.14% de las variaciones del PIB, lo cual nos muestra un modelo bastante acertado. Los coeficientes nos dicen que si mantenemos las demás variables constantes (ceteris paribus) un aumento de 1% en la tasa de participación aumenta el PIB en 20.18 mil millones de dólares, mientras que cada mil millones adicionales en el presupuesto de género incrementa el PIB en 1.12 mil millones.
+
+El modelo explica que por cada 1% de mujeres posicionadas en puestos directivos el PIB aumenta un 21.89 mil millones; esta variable no resulta tan significativa por si sola, lo que sugiere que el crecimiento de PIB depende de otras variables.
+
+Log(PIB)\~Tasa de participación: Al transformar nuestros datos usando logaritmos, vemos que este modelo nos dice que por cada 1% que aumenta la tasa de participación de las mujeres en el trabajo, el PIB del país crece aproximadamente 8.41%. También nos podemos dar cuenta que el modelo explica el 90% de las variaciones del PIB, esto nos quiere decir que el modelo es altamente significativo.
+
+Log(PIB)\~Puestos de alta dirección: En este caso, el modelo porcentual de los puestos directivos usando logaritmos nos muestra que por cada 1% adicional de mujeres en puestos de alta dirección, el PIB aumenta 1.52%, sin embargo, este modelo solo explica el 35% de las variaciones del PIB. Esto nos muestra que no es la variable más significativa para explicar el modelo.
+
+Modelo de Cobb-Douglas: Este revela que una mayor participación femenina impulsa significativamente el PIB, un aumento del 1% en la la tasa de participación laboral de las mujeres incrementa el PIB a un 3.35%. El presupuesto con perspectiva de género y los puestos directivos femeninos también tienen efectos positivos, aunque menores. En los intervalos de confianza podemos notar que la tasa de participacion es una variable significativa debido a que no incluye el valor cero en el intervalo, por lo cual el aumentar la tasa de la participacion femenina resulta importante en la participacion economica.
+
+Finalmente con la Prueba de Park determinamos que el modelo es homocedastico, es decir que las varianzas permanecen constantes.
+
+Con la prueba de Chow podemos concluir que el la 5ta observación (año 2019) es el punto de ruptura en el que podría haber una cambio significativo; sin embargo nuestro p-value= .2594 es mayor al valor de significancia $alpha$=0.05 y los valores obtenidos de BIC no aumentan mucho por lo que no hay un cambio significativo. Es decir no rechazamos la hipotesis nula (No hay cambio estructural).
+
+# Conclusiones
+
+En los distintos modelos de regresión observamos que la participación femenina tiene un impacto positivo en la economía y en el aumento del PIB. La variable de la tasa de participación laboral de las mujeres notamos que es la mas influyente entre las demas variables, ya que esta incrementa un porcentaje relevante del PIB. Cabe mencionar que variables como el de presupuesto con perspectiva de género y la presencia de mujeres en cargos directivos tambien aportan al crecimiento economico, pero su efecto es menor en comparacion con la tasa de participacion laboral general.Gracias al modelo de Cobb-Douglas y a las regresiones logaritmicas podemos comprobar que una mayor inclusión femenina impulsa la productividad y el desarrollo económico.
+
+Con los resultados obtenidos y el análisis realizado a lo largo del proyecto podemos concluir que nuestra hipótesis planteada al inicio del proyecto es correcta; el modelo se sustenta con las variables independientes elegidas que en su totalidad prueba que la inclusión de la mujer en la economía tiene un impacto en la producción de riqueza del país.
+
+# Referencias
+
+● (S/f). Bancosantander.es. Recuperado el 2 de noviembre de 2025, de https://www.bancosantander.es/glosario/pib-producto-interior-bruto ● de Economía, S. (s/f). La Secretaría de Economía lanza Estrategia de Género para incrementar la participación de las mujeres en el desarrollo productivo de México. gob.mx. Recuperado el 2 de noviembre de 2025, de https://www.gob.mx/se/prensa/la-secretaria-de-economia-lanza-estrategia-de-genero-para-incrementar-la-participacion-de-las-mujeres-en-el-desarrollo-productivo-de-mexico ●Cruz Sánchez, L. (s/f). *Presupuestos con perspectiva de género en el nivel federal y estatal en México*. Unwomen.org. Recuperado el 3 de noviembre de 2025, de https://mexico.unwomen.org/sites/default/files/Field%20Office%20Mexico/Documentos/Publicaciones/2014/Presupuestos%20nivel%20estatal%20y%20federal.pdf● Cómo combatir la brecha salarial entre hombres y mujeres en la Unión Europea. (2014). Inmujeres.gob.es, 1, 2. https://www.inmujeres.gob.es/publicacioneselectronicas/documentacion/documentos/de1460.pdf ● La paridad, V. H. (s/f). Mujeres en los negocios 2024. Grantthornton.mx. Recuperado el 2 de noviembre de 2025, de https://www.grantthornton.mx/globalassets/1.-member-firms/mexico/pdf/mujeres_en_los_negocios_2024_web.pdf?utm_source=chatgpt.com ● Osores, M. (2025, marzo 5). Mujeres en la alta dirección en México alcanzan casi un 40%. TechTarget. https://www.computerweekly.com/es/noticias/366620276/Mujeres-en-la-alta-direccion-en-Mexico-alcanzan-casi-un-40●(S/f-a). Scribbr.com. Recuperado el 3 de noviembre de 2025, de https://www.scribbr.com/statistics/simple-linear-regression/●Hayes, A. (2008, marzo 16). *Multiple linear regression (MLR): Definition, formula, and example*. Investopedia. https://www.investopedia.com/terms/m/mlr.asp●de Hacienda, M. (s/f). *Cobb-Douglas*. Hacienda.cl. Recuperado el 3 de noviembre de 2025, de https://old.hacienda.cl/glosario/cobb-douglas.html●Hayes, A. (2007, mayo 28). *Error term: Definition, example, and how to calculate with formula*. Investopedia. https://www.investopedia.com/terms/e/errorterm.asp}●Arenas, C. (2018, noviembre 12). *R2 (R cuadrado) o Coeficiente de Determinación*. Estrategiasdeinversion.com; Estrategias de Inversión. https://www.estrategiasdeinversion.com/herramientas/diccionario/fondos/r2-r-cuadrado-o-coeficiente-de-determinacion-t-1163
+
+**Base de datos** ●World Bank Open Data. (s. f.). World Bank Open Data. https://datos.bancomundial.org/indicador/NY.GDP.MKTP.CD ●World Bank Open Data. (s. f.-b). World Bank Open Data. https://datos.bancomundial.org/indicator/SL.TLF.ACTI.FE.ZS?end=2024&start=2024&view=bar ●Gobierno de México. (2015-2025). Presupuesto de Egresos de la Federación para el ejercicio fiscal de \[2015-2025\]. Diario Oficial de la Federación. https://www.dof.gob.mx ●(S/f). Oecd.org. Recuperado el 3 de noviembre de 2025, de https://www.oecd.org/en/data/indicators/gender-wage-gap.html●Vasal, V. (s/f). *Women in Business 2025*. Grant Thornton International Ltd. Home. Recuperado el 3 de noviembre de 2025, de https://www.grantthornton.global/en/insights/women-in-business/women-in-business-2025/
