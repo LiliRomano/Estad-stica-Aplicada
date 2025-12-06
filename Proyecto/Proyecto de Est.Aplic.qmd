@@ -1,6 +1,6 @@
 ---
 title: "Proyecto EA"
-author: "Andrea Zamora, Sarai Briones, Lilian Romano"
+author: "Sarai Briones, Lilian Romano, Andrea Zamora"
 format: html
 editor: visual
 ---
@@ -27,6 +27,15 @@ library(tidyverse)
 # Introducción
 
 Este proyecto surge como una aplicación práctica de los conocimientos adquiridos en clase, particularmente de las técnicas econométricas vistas durante el curso, como la regresión lineal simple y la regresión múltiple matricial. A partir de estas herramientas queremos analizar los determinantes socioeconómicos que influyen en la brecha salarial de género en México, incorporando variables que pueden reflejar tanto la dinámica económica del país como las condiciones que tiene el mercado laboral y la implementación de políticas públicas orientadas a la igualdad de género. Este proyecto analiza los determinantes socioeconómicos de la brecha salarial de género en México a través de un enfoque econométrico basado en diversos modelos que buscan explicar estas desigualdades entre hombres y mujeres. El problema central radica en que a pesar de los avances institucionales y las políticas orientadas a promover la igualdad de género, la desigualdad en los salarios entre hombres y mujeres persiste. La investigación inicia con la hipótesis de que la brecha salarial disminuye cuando aumenta la participación femenina en el mercado laboral, se fortalece la presencia de mujeres en puestos directivos y se asignan mayores recursos públicos con perspectiva de género. Los modelos que presentamos incluyen variables que representan el desempeño macroeconomico, políticas gubernamentales, condiciones laborales y características socieconómicas diferenciadas por sexo.
+
+# Objetivo General
+Analizar la diferencia de ingresos entre hombres y mujeres en los estados de México, evaluando la magnitud de la brecha económica de género y su relación con factores educativos mediante técnicas estadísticas.
+
+# Objetivos en específicos
+-Identificar la brecha de ingresos por género en cada estado.
+-Evaluar si exiten diferencias estadísticamente significativas entre los ingresos de hombres y mujeres.
+-Analizar la relación entre los niveles educativos y los ingresos por estado.
+-Comparar los ingresos por estado para detectar patrones de desigualdad económica.
 
 ## Estadísticas descriptivas nacionales
 
