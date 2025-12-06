@@ -1,0 +1,2248 @@
+---
+title: "Proyecto EA"
+author: "Andrea Zamora, Sarai Briones, Lilian Romano"
+format: html
+editor: visual
+---
+
+```{r}
+#| code-fold: true
+#| fig-width: 7
+#| fig-align: center
+
+library(car)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(kableExtra)
+library(knitr)
+library(lmtest)
+library(nortest)
+library(reshape2)
+library(scales)
+library(tidyr)
+library(tidyverse)
+```
+
+# Introducción
+
+Este proyecto surge como una aplicación práctica de los conocimientos adquiridos en clase, particularmente de las técnicas econométricas vistas durante el curso, como la regresión lineal simple y la regresión múltiple matricial. A partir de estas herramientas queremos analizar los determinantes socioeconómicos que influyen en la brecha salarial de género en México, incorporando variables que pueden reflejar tanto la dinámica económica del país como las condiciones que tiene el mercado laboral y la implementación de políticas públicas orientadas a la igualdad de género. Este proyecto analiza los determinantes socioeconómicos de la brecha salarial de género en México a través de un enfoque econométrico basado en diversos modelos que buscan explicar estas desigualdades entre hombres y mujeres. El problema central radica en que a pesar de los avances institucionales y las políticas orientadas a promover la igualdad de género, la desigualdad en los salarios entre hombres y mujeres persiste. La investigación inicia con la hipótesis de que la brecha salarial disminuye cuando aumenta la participación femenina en el mercado laboral, se fortalece la presencia de mujeres en puestos directivos y se asignan mayores recursos públicos con perspectiva de género. Los modelos que presentamos incluyen variables que representan el desempeño macroeconomico, políticas gubernamentales, condiciones laborales y características socieconómicas diferenciadas por sexo.
+
+## Estadísticas descriptivas nacionales
+
+```{r}
+datos <- read.csv("ingresos_estados.csv")
+```
+
+```{r}
+datos_largos <- datos |> 
+  pivot_longer(
+    cols = c(Formal_Hombres, Formal_Mujeres, Informal_Hombres, Informal_Mujeres),
+    names_to = c("Condicion", "Sexo"),
+    names_sep = "_",
+    values_to = "Ingreso"
+  )
+
+# Calcular estadísticas descriptivas a nivel nacional
+estadisticas_nacionales <- datos_largos |> 
+  group_by(Condicion, Sexo) |> 
+  summarise(
+    observaciones = n(),
+    media_ingreso = mean(Ingreso, na.rm = TRUE),
+    mediana_ingreso = median(Ingreso, na.rm = TRUE),
+    desviacion_ingreso = sd(Ingreso, na.rm = TRUE),
+    coef_var = sd(Ingreso, na.rm = TRUE) / abs(mean(Ingreso, na.rm = TRUE)),
+    ingreso_min = min(Ingreso, na.rm = TRUE),
+    ingreso_max = max(Ingreso, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+```{r}
+kable(
+  estadisticas_nacionales,
+  col.names = c("Condición", "Sexo", "Obs.", "Media", "Mediana",
+                "Desv. Est.", "Coef. Var.", "Mín.", "Máx."),
+  digits = 2,
+  caption = "Estadísticas Descriptivas Nacionales sobre Ingresos por Sexo y Condición de Formalidad"
+) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE,
+    font_size = 12
+  ) %>%
+  scroll_box(height = "500px")
+```
+
+## *Brecha salarial*
+
+```{r}
+brecha_conjunta <- datos %>%
+  mutate(
+    # Brecha formal
+    brecha_formal = (Formal_Hombres - Formal_Mujeres) / Formal_Hombres * 100,
+
+    # Brecha informal
+    brecha_informal = (Informal_Hombres - Informal_Mujeres) / Informal_Hombres * 100,
+
+    # Brecha conjunta ponderada
+    brecha_conjunta = (
+      (Formal_Hombres - Formal_Mujeres) +
+      (Informal_Hombres - Informal_Mujeres)
+    ) / 
+    (Formal_Hombres + Informal_Hombres) * 100,
+    
+    #Ingreso promedio
+     ingreso_promedio = (Formal_Hombres + Formal_Mujeres +
+                        Informal_Hombres + Informal_Mujeres) / 4
+  )
+
+brecha_conjunta
+```
+
+## *Mapa de brecha salarial*
+
+```{r}
+catalogo_claves <- data.frame(
+  Estado = c("Aguascalientes","Baja California","Baja California Sur","Campeche","Coahuila","Colima","Chiapas",
+             "Chihuahua","Ciudad de Mexico","Durango","Guanajuato","Guerrero","Hidalgo","Jalisco","Mexico",
+             "Michoacan","Morelos","Nayarit","Nuevo Leon","Oaxaca","Puebla","Queretaro","Quintana Roo",
+             "San Luis Potosi","Sinaloa","Sonora","Tabasco","Tamaulipas","Tlaxcala","Veracruz","Yucatan","Zacatecas"),
+  CVE_ENT = c("01","02","03","04","05","06","07","08","09","10","11","12","13","14","15","16","17","18",
+              "19","20","21","22","23","24","25","26","27","28","29","30","31","32")
+)
+brecha_conjunta <- left_join(brecha_conjunta, catalogo_claves, by = "Estado")
+
+
+estadisticas_mapa <- brecha_conjunta
+estadisticas_mapa <- estadisticas_mapa[, c("CVE_ENT", "Estado", "brecha_conjunta")]
+
+
+estadisticas_mapa <- left_join(nacional_estado, estadisticas_mapa, by = "CVE_ENT")
+
+
+mapa_brecha <- ggplot(estadisticas_mapa) +
+  geom_sf(aes(fill = brecha_conjunta), color = "gray50", size = 0.4) +
+  labs(
+    title = "Brecha Salarial Conjunta por Estado",
+    fill = "% Brecha",
+  ) +
+  scale_fill_viridis_c(
+    option = "C",
+    labels = function(x) paste0(round(x, 1), "%")
+  ) +
+  theme_void() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+
+print(mapa_brecha)
+```
+
+## *Mapa de ingreso promedio*
+
+```{r}
+catalogo_claves <- data.frame(
+  Estado = c("Aguascalientes","Baja California","Baja California Sur","Campeche","Coahuila","Colima","Chiapas",
+             "Chihuahua","Ciudad de Mexico","Durango","Guanajuato","Guerrero","Hidalgo","Jalisco","Mexico",
+             "Michoacan","Morelos","Nayarit","Nuevo Leon","Oaxaca","Puebla","Queretaro","Quintana Roo",
+             "San Luis Potosi","Sinaloa","Sonora","Tabasco","Tamaulipas","Tlaxcala","Veracruz","Yucatan","Zacatecas"),
+  CVE_ENT = c("01","02","03","04","05","06","07","08","09","10","11","12","13","14","15","16","17","18",
+              "19","20","21","22","23","24","25","26","27","28","29","30","31","32")
+)
+brecha_conjunta <- left_join(brecha_conjunta, catalogo_claves, by = "Estado")
+
+
+estadisticas_mapa_ingreso <- brecha_conjunta
+estadisticas_mapa_ingreso <- estadisticas_mapa_ingreso[, c("CVE_ENT", "Estado", "ingreso_promedio")]
+
+
+estadisticas_mapa_ingreso <- left_join(nacional_estado, estadisticas_mapa_ingreso, by = "CVE_ENT")
+
+
+mapa_ingreso <- ggplot(estadisticas_mapa_ingreso) +
+  geom_sf(aes(fill = ingreso_promedio), color = "gray50", size = 0.4) +
+  labs(
+    title = "Ingreso promedio por Estado",
+    fill = "Ingreso promedio",
+  ) +
+  scale_fill_viridis_c(
+    option = "C",
+    labels = function(x) format(round(x, 0), big.mark = ",")
+  ) +
+  theme_void() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+
+print(mapa_ingreso)
+```
+
+## \*Brecha Salarial vs Ingreso promedio\*\*
+
+```{r}
+
+ggplot(brecha_conjunta,
+       aes(x = ingreso_promedio, y = brecha_conjunta)) +
+  geom_point(color = "steelblue", size = 2) +
+  geom_smooth(method = "lm", se = FALSE,
+              color = "red", linetype = "dashed") +
+  geom_text(aes(label = Estado),
+            hjust = 0, vjust = 1.2, size = 3,
+            check_overlap = TRUE) +
+  labs(
+    title = "Ingreso promedio vs Brecha salarial conjunta",
+    x = "Ingreso laboral promedio",
+    y = "Brecha salarial conjunta (%)"
+  ) +
+  theme_minimal()
+
+```
+
+## \* Top y bottom ingreso promedio\*
+
+```{r}
+#Top
+top5_ingreso_promedio <- brecha_conjunta %>% 
+  arrange(desc(ingreso_promedio)) %>% 
+  slice_head(n = 5)%>%
+ dplyr::select(Estado, ingreso_promedio)
+
+top5_ingreso_promedio
+
+#Bottom
+bottom5_ingreso_promedio <- brecha_conjunta %>% 
+  arrange(ingreso_promedio) %>%
+  slice_head(n = 5) %>%
+  dplyr::select(Estado, ingreso_promedio)
+
+bottom5_ingreso_promedio
+
+```
+
+## \* Top brecha salarial (%)\*
+
+```{r}
+top5_brecha_salarial <- brecha_conjunta %>% 
+  arrange(desc(brecha_conjunta)) %>% 
+  slice_head(n = 5) %>% 
+  dplyr::select(Estado, brecha_conjunta)
+
+top5_brecha_salarial
+
+bottom5_brecha_conjunta <- brecha_conjunta %>% 
+  arrange(brecha_conjunta) %>%
+  slice_head(n = 5) %>%
+  dplyr::select(Estado, brecha_conjunta)
+
+bottom5_brecha_conjunta
+```
+
+*Cargar datos temporales*
+
+```{r}
+# Cargar datos temporales
+datos <- read.csv("data.csv")
+colnames(datos) <- c("Año", "PIB", "Tasa_participacion", "Presupuesto", 
+                     "Brecha_salarial", "Puestos_direccion", "Poblacion_activa",
+                     "Ingreso_min_hombres", "Ingreso_min_mujeres")
+head(datos)
+summary(datos)
+```
+
+## Evolución de la brecha salarial por año
+
+```{r}
+ggplot(datos, aes(x = Año, y = Brecha_salarial)) +
+  geom_line(color = "darkred", size = 1) +
+  geom_point(size = 2) +
+  labs(title = "Evolución de la brecha salarial por año",
+       x = "Año",
+       y = "Brecha salarial (%)")
+```
+
+## Relación entre presupuesto y brecha salarial
+
+```{r}
+ggplot(datos, aes(x = Presupuesto, y = Brecha_salarial)) +
+  geom_point(aes(size = PIB), alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE) +
+  labs(title = "¿Más presupuesto reduce la brecha salarial?",
+       x = "Presupuesto", 
+       y = "Brecha salarial (%)")
+```
+
+## Indicadores
+
+```{r}
+p1 <- ggplot(datos, aes(x = Año, y = Tasa_participacion)) +
+  geom_line(color = "blue") + 
+  labs(title = "Tasa de participación")
+
+p2 <- ggplot(datos, aes(x = Año, y = Brecha_salarial)) +
+  geom_line(color = "red") + 
+  labs(title = "Brecha salarial")
+
+p3 <- ggplot(datos, aes(x = Año, y = Puestos_direccion)) +
+  geom_line(color = "green") + 
+  labs(title = "Mujeres en puestos directivos")
+
+grid.arrange(p1, p2, p3, ncol = 2)
+```
+
+# Modelo:
+
+$$
+Brecha\ salarial = PIB + Tasa\ de\ participación + Presupuesto + Puestos\ de\ alta\ dirección + Población\ económicamente\ activa + Ingreso\ de\ hasta\ un\ salario\ mínimo\ hombres + Ingreso\ de\ hasta\ un\ salario\ mínimo\ mujeres
+$$
+
+## Regresión lineal simple
+
+```{r}
+# MODELO 1: Brecha salarial explicada por Tasa de participación femenina
+modelo1 <- lm(Brecha_salarial ~ Tasa_participacion, data = datos)
+summary(modelo1)
+
+# Gráfico
+ggplot(datos, aes(x = Tasa_participacion, y = Brecha_salarial)) +
+  geom_point(color = "#E63946", alpha = 0.7, size = 4) +
+  geom_smooth(method = "lm", se = TRUE, color = "#457B9D", fill = "#457B9D", alpha = 0.2) +
+  geom_text(aes(label = Año), hjust = -0.3, vjust = -0.3, size = 3, color = "gray30") +
+  labs(title = "Brecha Salarial vs Tasa de Participación Femenina",
+       subtitle = "Análisis temporal 2015-2024",
+       x = "Tasa de participación femenina (%)",
+       y = "Brecha salarial (%)") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        plot.subtitle = element_text(color = "gray40"))
+
+# Resultados 
+coef_modelo1 <- summary(modelo1)$coefficients
+r_squared1 <- summary(modelo1)$r.squared
+cat("\nMODELO 1: BRECHA SALARIAL ~ TASA PARTICIPACIÓN\n")
+cat(sprintf("Ecuación estimada:\n"))
+cat(sprintf("Brecha_salarial = %.4f + %.4f * Tasa_participacion\n", 
+            coef_modelo1[1,1], coef_modelo1[2,1]))
+cat(sprintf("R^2 = %.4f (El modelo explica %.2f%% de la variabilidad)\n", 
+            r_squared1, r_squared1*100))
+cat(sprintf("p-value = %.6f\n", coef_modelo1[2,4]))
+```
+
+```{r}
+# MODELO 2: Brecha salarial explicada por el número de mujeres con un salario mínimo
+modelo2 <- lm(Brecha_salarial ~ Ingreso_min_mujeres, data = datos)
+summary(modelo2)
+
+# Gráfico
+ggplot(datos, aes(x = Ingreso_min_mujeres, y = Brecha_salarial)) +
+  geom_point(color = "#F77F00", alpha = 0.7, size = 4) +
+  geom_smooth(method = "lm", se = TRUE, color = "#06A77D", fill = "#06A77D", alpha = 0.2) +
+  geom_text(aes(label = Año), hjust = -0.3, vjust = -0.3, size = 3, color = "gray30") +
+  labs(title = "Brecha Salarial vs Número de mujeres con un salario mínimo",
+       x = "Número de mujeres con un salario mínimo",
+       y = "Brecha salarial (%)") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14))
+
+# Resultados
+coef_modelo2 <- summary(modelo2)$coefficients
+r_squared2 <- summary(modelo2)$r.squared
+cat("\nMODELO 2: BRECHA SALARIAL ~ INGRESO MÍNIMO MUJERES\n")
+cat(sprintf("Ecuación estimada:\n"))
+cat(sprintf("Brecha_salarial = %.4f + %.4f * Ingreso_min_mujeres\n", 
+            coef_modelo2[1,1], coef_modelo2[2,1]))
+cat(sprintf("R^2 = %.4f (El modelo explica %.2f%% de la variabilidad)\n", 
+            r_squared2, r_squared2*100))
+cat(sprintf("p-value = %.6f\n", coef_modelo2[2,4]))
+```
+
+```{r}
+# MODELO 3: Brecha salarial explicada por PIB
+modelo3 <- lm(Brecha_salarial ~ PIB, data = datos)
+summary(modelo3)
+
+# Gráfico
+ggplot(datos, aes(x = PIB, y = Brecha_salarial)) +
+  geom_point(color = "#9B59B6", alpha = 0.7, size = 4) +
+  geom_smooth(method = "lm", se = TRUE, color = "#3498DB", fill = "#3498DB", alpha = 0.2) +
+  geom_text(aes(label = Año), hjust = -0.3, vjust = -0.3, size = 3, color = "gray30") +
+  labs(title = "Brecha Salarial vs PIB",
+       subtitle = "Análisis temporal 2015-2024",
+       x = "PIB (Miles de millones US$)",
+       y = "Brecha salarial (%)") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        plot.subtitle = element_text(color = "gray40"))
+
+# Resultados
+coef_modelo3 <- summary(modelo3)$coefficients
+r_squared3 <- summary(modelo3)$r.squared
+cat("\nMODELO 3: BRECHA SALARIAL ~ PIB\n")
+cat(sprintf("Ecuación estimada:\n"))
+cat(sprintf("Brecha_salarial = %.4f + %.4f * PIB\n", 
+            coef_modelo3[1,1], coef_modelo3[2,1]))
+cat(sprintf("R^2 = %.4f (El modelo explica %.2f%% de la variabilidad)\n", 
+            r_squared3, r_squared3*100))
+cat(sprintf("p-value = %.6f\n", coef_modelo3[2,4]))
+```
+
+```{r}
+# MODELO 4: Brecha salarial explicada por Presupuesto
+modelo4 <- lm(Brecha_salarial ~ Presupuesto, data = datos)
+summary(modelo4)
+
+# Gráfico
+ggplot(datos, aes(x = Presupuesto, y = Brecha_salarial)) +
+  geom_point(color = "#E74C3C", alpha = 0.7, size = 4) +
+  geom_smooth(method = "lm", se = TRUE, color = "#16A085", fill = "#16A085", alpha = 0.2) +
+  geom_text(aes(label = Año), hjust = -0.3, vjust = -0.3, size = 3, color = "gray30") +
+  labs(title = "Brecha Salarial vs Presupuesto",
+       subtitle = "Presupuesto destinado a políticas de género",
+       x = "Presupuesto (millones de pesos)",
+       y = "Brecha salarial (%)") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        plot.subtitle = element_text(color = "gray40"))
+
+# Resultados
+coef_modelo4 <- summary(modelo4)$coefficients
+r_squared4 <- summary(modelo4)$r.squared
+cat("\nMODELO 4: BRECHA SALARIAL ~ PRESUPUESTO\n")
+cat(sprintf("Ecuación estimada:\n"))
+cat(sprintf("Brecha_salarial = %.4f + %.4f * Presupuesto\n", 
+            coef_modelo4[1,1], coef_modelo4[2,1]))
+cat(sprintf("R^2 = %.4f (El modelo explica %.2f%% de la variabilidad)\n", 
+            r_squared4, r_squared4*100))
+cat(sprintf("p-value = %.6f\n", coef_modelo4[2,4]))
+```
+
+```{r}
+# MODELO 5: Brecha salarial explicada por Población Activa (PEA)
+modelo5 <- lm(Brecha_salarial ~ Poblacion_activa, data = datos)
+summary(modelo5)
+
+# Gráfico
+ggplot(datos, aes(x = Poblacion_activa, y = Brecha_salarial)) +
+  geom_point(color = "#F39C12", alpha = 0.7, size = 4) +
+  geom_smooth(method = "lm", se = TRUE, color = "#8E44AD", fill = "#8E44AD", alpha = 0.2) +
+  geom_text(aes(label = Año), hjust = -0.3, vjust = -0.3, size = 3, color = "gray30") +
+  labs(title = "Brecha Salarial vs Población Económicamente Activa",
+       subtitle = "Total de personas en la fuerza laboral",
+       x = "Población Económicamente Activa (PEA)",
+       y = "Brecha salarial (%)") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        plot.subtitle = element_text(color = "gray40"))
+
+# Resultados
+coef_modelo5 <- summary(modelo5)$coefficients
+r_squared5 <- summary(modelo5)$r.squared
+cat("\nMODELO 5: BRECHA SALARIAL ~ POBLACIÓN ACTIVA\n")
+cat(sprintf("Ecuación estimada:\n"))
+cat(sprintf("Brecha_salarial = %.4f + %.4f * Poblacion_activa\n", 
+            coef_modelo5[1,1], coef_modelo5[2,1]))
+cat(sprintf("R^2 = %.4f (El modelo explica %.2f%% de la variabilidad)\n", 
+            r_squared5, r_squared5*100))
+cat(sprintf("p-value = %.6f\n", coef_modelo5[2,4]))
+```
+
+```{r}
+# MODELO 6: Brecha salarial explicada por Ingreso Mínimo de Hombres
+modelo6 <- lm(Brecha_salarial ~ Ingreso_min_hombres, data = datos)
+summary(modelo6)
+
+# Gráfico
+ggplot(datos, aes(x = Ingreso_min_hombres, y = Brecha_salarial)) +
+  geom_point(color = "#2C3E50", alpha = 0.7, size = 4) +
+  geom_smooth(method = "lm", se = TRUE, color = "#E67E22", fill = "#E67E22", alpha = 0.2) +
+  geom_text(aes(label = Año), hjust = -0.3, vjust = -0.3, size = 3, color = "gray30") +
+  labs(title = "Brecha Salarial vs Ingreso Mínimo de Hombres",
+       subtitle = "Número de hombres con salario mínimo",
+       x = "Ingreso mínimo - Hombres",
+       y = "Brecha salarial (%)") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        plot.subtitle = element_text(color = "gray40"))
+
+# Resultados
+coef_modelo6 <- summary(modelo6)$coefficients
+r_squared6 <- summary(modelo6)$r.squared
+cat("\nMODELO 6: BRECHA SALARIAL ~ INGRESO MÍNIMO HOMBRES\n")
+cat(sprintf("Ecuación estimada:\n"))
+cat(sprintf("Brecha_salarial = %.4f + %.4f * Ingreso_min_hombres\n", 
+            coef_modelo6[1,1], coef_modelo6[2,1]))
+cat(sprintf("R^2 = %.4f (El modelo explica %.2f%% de la variabilidad)\n", 
+            r_squared6, r_squared6*100))
+cat(sprintf("p-value = %.6f\n", coef_modelo6[2,4]))
+```
+
+```{r}
+# MODELO 7: Brecha salarial explicada por Puestos de Alta Dirección
+modelo7 <- lm(Brecha_salarial ~ Puestos_direccion, data = datos)
+summary(modelo7)
+
+# Gráfico
+ggplot(datos, aes(x = Puestos_direccion, y = Brecha_salarial)) +
+  geom_point(color = "#1ABC9C", alpha = 0.7, size = 4) +
+  geom_smooth(method = "lm", se = TRUE, color = "#E91E63", fill = "#E91E63", alpha = 0.2) +
+  geom_text(aes(label = Año), hjust = -0.3, vjust = -0.3, size = 3, color = "gray30") +
+  labs(title = "Brecha Salarial vs Puestos de Alta Dirección",
+       subtitle = "Mujeres en puestos directivos",
+       x = "Puestos de alta dirección ocupados por mujeres (%)",
+       y = "Brecha salarial (%)") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        plot.subtitle = element_text(color = "gray40"))
+
+# Resultados
+coef_modelo7 <- summary(modelo7)$coefficients
+r_squared7 <- summary(modelo7)$r.squared
+cat("\nMODELO 7: BRECHA SALARIAL ~ PUESTOS DIRECCIÓN\n")
+cat(sprintf("Ecuación estimada:\n"))
+cat(sprintf("Brecha_salarial = %.4f + %.4f * Puestos_direccion\n", 
+            coef_modelo7[1,1], coef_modelo7[2,1]))
+cat(sprintf("R^2 = %.4f (El modelo explica %.2f%% de la variabilidad)\n", 
+            r_squared7, r_squared7*100))
+cat(sprintf("p-value = %.6f\n", coef_modelo7[2,4]))
+```
+
+## Todas las regresiones en una sola
+
+```{r}
+lista_graficos <- list()
+
+for(i in 1:length(variables_x)) {
+  
+  p <- ggplot(datos, aes_string(x = variables_x[i], y = "Brecha_salarial")) +
+    geom_point(color = colores_puntos[i], alpha = 0.7, size = 3) +
+    geom_smooth(method = "lm", se = TRUE, 
+                color = colores_lineas[i], 
+                fill = colores_lineas[i], alpha = 0.2, 
+                linewidth = 1) +
+    labs(title = paste("Modelo", i),
+         subtitle = sprintf("R^2=%.3f, β=%.3f", 
+                           resultados$R_squared[i], 
+                           resultados$Pendiente[i]),
+         x = gsub("_", " ", variables_x[i]),
+         y = "Brecha (%)") +
+    theme_minimal(base_size = 10) +
+    theme(plot.title = element_text(face = "bold", size = 11),
+          plot.subtitle = element_text(size = 9, color = "gray40"),
+          axis.title = element_text(size = 9))
+  
+  lista_graficos[[i]] <- p
+}
+
+# Combinar todos en un solo gráfico
+grid.arrange(grobs = lista_graficos, ncol = 3, nrow = 3,
+             top = "Regresiones Lineales Simples: Brecha Salarial vs Variables Explicativas")
+```
+
+## Regresión múltiple matricial
+
+$$
+\beta = (X^{T}X)^{-1}X^{T}Y
+$$
+
+```{r}
+y_mult <- datos$Brecha_salarial
+x_mult <- datos[, c("Tasa_participacion", "Puestos_direccion", "PIB", "Presupuesto", "Poblacion_activa", "Ingreso_min_hombres", "Ingreso_min_mujeres")]
+
+Y_mult <- as.matrix(y_mult)
+X_mult <- cbind(1, as.matrix(x_mult))
+colnames(X_mult)[1] <- "Intercepto"
+
+cat("\nREGRESIÓN MÚLTIPLE MATRICIAL\n")
+cat("Dimensiones de las matrices:\n")
+cat("X:", dim(X_mult)[1], "x", dim(X_mult)[2], "\n")
+cat("Y:", dim(Y_mult)[1], "x", dim(Y_mult)[2], "\n\n")
+```
+
+## Calculo de betas
+
+```{r}
+# β = (X'X)⁻¹X'Y
+betas_mult <- solve(t(X_mult) %*% X_mult) %*% t(X_mult) %*% Y_mult
+cat("Coeficientes estimados (Regresión Múltiple):\n")
+print(betas_mult)
+
+# Verificación con lm()
+modelo_mult_verificacion <- lm(Brecha_salarial ~ Tasa_participacion + Puestos_direccion + PIB + Presupuesto + Poblacion_activa, data = datos)
+cat("\nVerificación con lm():\n")
+print(coef(modelo_mult_verificacion))
+```
+
+**Nota: Se muestra multicolinealidad**
+
+## Cálculo de R\^2 y R\^2 ajustado
+
+```{r}
+n_mult <- nrow(X_mult)
+k_mult <- ncol(X_mult)
+y_hat_mult <- X_mult %*% betas_mult
+residuos_mult <- Y_mult - y_hat_mult
+
+SSR_mult <- t(residuos_mult) %*% residuos_mult
+SST_mult <- sum((Y_mult - mean(Y_mult))^2)
+R2_mult <- 1 - (SSR_mult / SST_mult)
+R2_ajustado_mult <- 1 - (1 - R2_mult) * (n_mult - 1) / (n_mult - k_mult)
+
+cat(sprintf("R^2 (múltiple): %.4f\n", R2_mult))
+cat(sprintf("R^2 ajustado (múltiple): %.4f\n", R2_ajustado_mult))
+cat(sprintf("El modelo explica %.2f%% de la variabilidad de la brecha salarial\n", R2_mult * 100))
+```
+
+```{r}
+# Varianza del error
+sigma2_mult <- SSR_mult / (n_mult - k_mult)
+cat(sprintf("\nσ^2 (varianza del error): %.4f\n", sigma2_mult))
+```
+
+## Predicciones
+
+```{r}
+# Tabla
+comparacion_mult <- data.frame(
+  Año = datos$Año,
+  Brecha_real = Y_mult,
+  Brecha_predicha = y_hat_mult,
+  Residuo = residuos_mult
+)
+print(comparacion_mult)
+
+# Gráfico: Real vs Predicho
+plot(Y_mult, y_hat_mult,
+     main = "Regresión Múltiple: Brecha Real vs Predicha",
+     xlab = "Brecha Salarial Real (%)",
+     ylab = "Brecha Salarial Predicha (%)",
+     col = "#E63946", pch = 19, cex = 1.5)
+abline(a = 0, b = 1, col = "#457B9D", lwd = 2, lty = 2)
+grid()
+text(Y_mult, y_hat_mult, labels = datos$Año, pos = 3, cex = 0.7, col = "gray30")
+
+# Gráfico: Evolución temporal
+ggplot(comparacion_mult, aes(x = Año)) +
+  geom_line(aes(y = Brecha_real, color = "Real"), size = 1.2) +
+  geom_point(aes(y = Brecha_real, color = "Real"), size = 3) +
+  geom_line(aes(y = Brecha_predicha, color = "Predicho"), size = 1.2, linetype = "dashed") +
+  geom_point(aes(y = Brecha_predicha, color = "Predicho"), size = 3) +
+  scale_color_manual(values = c("Real" = "#E63946", "Predicho" = "#457B9D")) +
+  labs(title = "Regresión Múltiple: Valores Reales vs Predichos",
+       subtitle = "Brecha salarial (2015-2024)",
+       x = "Año",
+       y = "Brecha salarial (%)",
+       color = "") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        legend.position = "bottom")
+```
+
+## Modelo Log-Lin
+
+```{r}
+modelo_loglin <- lm(log(Brecha_salarial) ~ PIB + Ingreso_min_mujeres, data = datos)
+summary(modelo_loglin)
+```
+
+```{r}
+cat("\nMODELO LOG-LIN\n")
+cat("ln(Brecha_salarial) = β0 + β1*PIB + β2*Ingreso_min_mujeres\n")
+cat("\nInterpretación:\n")
+cat("- Un aumento de 1 unidad en el PIB (miles de millones US$) se asocia con un cambio de",
+    sprintf("%.4f%%", coef(modelo_loglin)[2]*100), "en la brecha salarial\n")
+cat("- Un aumento de 1 unidad en el ingreso mínimo de mujeres se asocia con un cambio de",
+    sprintf("%.4f%%", coef(modelo_loglin)[3]*100), "en la brecha salarial\n")
+```
+
+```{r}
+# Gráfico log-lin
+datos$pred_loglin <- exp(predict(modelo_loglin))
+
+ggplot(datos, aes(x = Año)) +
+  geom_line(aes(y = Brecha_salarial, color = "Real"), size = 1.2) +
+  geom_point(aes(y = Brecha_salarial, color = "Real"), size = 3) +
+  geom_line(aes(y = pred_loglin, color = "Modelo Log-Lin"), size = 1.2, linetype = "dashed") +
+  geom_point(aes(y = pred_loglin, color = "Modelo Log-Lin"), size = 3) +
+  scale_color_manual(values = c("Real" = "#F77F00", "Modelo Log-Lin" = "#06A77D")) +
+  labs(title = "Modelo Log-Lin: Valores Reales vs Predichos",
+       subtitle = "Variables: PIB e Ingreso mínimo mujeres",
+       x = "Año",
+       y = "Brecha salarial (%)",
+       color = "") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        legend.position = "bottom")
+```
+
+## Modelo Cobb-Douglas
+
+```{r}
+# PIB y presupuesto
+modelo_cobb <- lm(log(Brecha_salarial) ~ log(PIB) + log(Presupuesto), data = datos)
+summary(modelo_cobb)
+
+cat("\nMODELO COBB-DOUGLAS\n")
+cat("ln(Brecha_salarial) = ln(A) + α*ln(PIB) + β*ln(Presupuesto)\n")
+cat("\nInterpretación (elasticidades):\n")
+cat("- α =", sprintf("%.4f", coef(modelo_cobb)[2]), 
+    ": Un aumento del 1% en el PIB genera un cambio de",
+    sprintf("%.4f%%", coef(modelo_cobb)[2]), "en la brecha salarial\n")
+cat("- β =", sprintf("%.4f", coef(modelo_cobb)[3]), 
+    ": Un aumento del 1% en el Presupuesto genera un cambio de",
+    sprintf("%.4f%%", coef(modelo_cobb)[3]), "en la brecha salarial\n")
+cat("\nNOTA: Los coeficientes representan elasticidades (cambio porcentual en Y\n")
+cat("      ante un cambio del 1% en X, manteniendo todo lo demás constante)\n")
+```
+
+```{r}
+# Ingresos mínimos (hombres y mujeres)
+modelo_cobb2 <- lm(log(Brecha_salarial) ~ log(Ingreso_min_hombres) + log(Ingreso_min_mujeres), 
+                   data = datos)
+summary(modelo_cobb2)
+
+cat("\nMODELO COBB-DOUGLAS 2\n")
+cat("ln(Brecha_salarial) = ln(A) + α*ln(Ingreso_min_hombres) + β*ln(Ingreso_min_mujeres)\n")
+cat("\nInterpretación (elasticidades):\n")
+cat("- α =", sprintf("%.4f", coef(modelo_cobb2)[2]), 
+    ": Un aumento del 1% en el ingreso mínimo de HOMBRES genera un cambio de",
+    sprintf("%.4f%%", coef(modelo_cobb2)[2]), "en la brecha salarial\n")
+cat("- β =", sprintf("%.4f", coef(modelo_cobb2)[3]), 
+    ": Un aumento del 1% en el ingreso mínimo de MUJERES genera un cambio de",
+    sprintf("%.4f%%", coef(modelo_cobb2)[3]), "en la brecha salarial\n")
+cat("\nNOTA IMPORTANTE: Este modelo es especialmente relevante para tu hipótesis,\n")
+cat("ya que analiza directamente cómo los cambios en los ingresos de cada género\n")
+cat("afectan la brecha salarial. Si β (mujeres) es negativo y mayor en magnitud\n")
+cat("que α (hombres), indica que aumentar los ingresos de las mujeres reduce\n")
+cat("más la brecha que aumentar los ingresos de los hombres.\n")
+
+```
+
+## *Vamos a llevar a cabo diferentes modelos para revisar y complementar nuestro modelo, ya que vemos que existe una multicolinealidad severa*
+
+## Modelo de correlación (Detectar colinealidad) (Matriz de correlaciones que detectan colinealidad.)
+
+```{r}
+cat("\nANÁLISIS DE CORRELACIÓN\n")
+
+# Matriz de correlación de variables independientes
+vars_independientes <- datos %>% 
+  select(Tasa_participacion, Puestos_direccion, PIB, Presupuesto,
+         Poblacion_activa, Ingreso_min_hombres, Ingreso_min_mujeres)
+
+matriz_corr <- cor(vars_independientes)
+cat("\nMatriz de Correlación entre Variables Independientes:\n")
+print(round(matriz_corr, 3))
+
+# Identificar correlaciones altas (> 0.8 o < -0.8)
+cat("\nCORRELACIONES ALTAS (|r| > 0.8)\n")
+correlaciones_altas <- which(abs(matriz_corr) > 0.8 & matriz_corr != 1, arr.ind = TRUE)
+if(nrow(correlaciones_altas) > 0) {
+  for(i in 1:nrow(correlaciones_altas)) {
+    var1 <- rownames(matriz_corr)[correlaciones_altas[i,1]]
+    var2 <- colnames(matriz_corr)[correlaciones_altas[i,2]]
+    valor <- matriz_corr[correlaciones_altas[i,1], correlaciones_altas[i,2]]
+    if(correlaciones_altas[i,1] < correlaciones_altas[i,2]) {  # Evitar duplicados
+      cat(sprintf("%s <-> %s: r = %.4f ⚠️  COLINEALIDAD SEVERA\n", var1, var2, valor))
+    }
+  }
+} else {
+  cat("No se detectaron correlaciones > 0.8\n")
+}
+
+corr_melted <- melt(matriz_corr)
+
+ggplot(corr_melted, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "#E63946", mid = "white", high = "#06A77D",
+                       midpoint = 0, limit = c(-1,1), 
+                       name = "Correlación") +
+  geom_text(aes(label = round(value, 2)), size = 3) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+        axis.text.y = element_text(size = 9),
+        plot.title = element_text(face = "bold", size = 14)) +
+  labs(title = "Matriz de Correlaciones - Detección de Multicolinealidad",
+       subtitle = "Valores cercanos a ±1 indican colinealidad",
+       x = "", y = "")
+```
+
+Nota: La matriz de correlaciones muestra la presencia de multicolinealidad severa entre varias de las variables explicativas del modelo. En particular, las correlaciones se observan en los siguientes indicadores PIB, Presupuesto y Población Activa, lo que indica que estas variables se mueven prácticamente de manera conjunta, esto dificulta que el modelo distinga el efecto individual de cada predictor. La multicolinealidad afecta la estabilidad del modelo y explica el error obtenido durante la regresión múltiple.
+
+## Análisis de multicolinealidad (VIF)
+
+```{r}
+# Modelo con todas las variables
+modelo_completo <- lm(Brecha_salarial ~ Tasa_participacion + Puestos_direccion + PIB + Presupuesto + Poblacion_activa +   Ingreso_min_hombres + Ingreso_min_mujeres, data = datos)
+```
+
+```{r}
+cat("\nANÁLISIS DE MULTICOLINEALIDAD (VIF)\n")
+
+# Calcular VIF
+vif_valores <- vif(modelo_completo)
+
+cat("\nFACTOR DE INFLACIÓN DE VARIANZA (VIF)\n")
+cat("Interpretación:\n")
+cat("  VIF < 5:  ✓ No hay multicolinealidad problemática\n")
+cat("  VIF 5-10: ⚠️  Multicolinealidad moderada\n")
+cat("  VIF > 10: ❌ Multicolinealidad severa (eliminar variable)\n\n")
+
+# Crear tabla ordenada de VIF
+vif_tabla <- data.frame(
+  Variable = names(vif_valores),
+  VIF = as.numeric(vif_valores),
+  Problema = ifelse(vif_valores > 10, "❌ SEVERO", 
+                   ifelse(vif_valores > 5, "⚠️  MODERADO", "✓ OK"))
+)
+vif_tabla <- vif_tabla[order(-vif_tabla$VIF),]
+
+print(vif_tabla)
+
+# Identificar variables problemáticas
+cat("\nRESUMEN DE MULTICOLINEALIDAD\n")
+vars_severas <- vif_tabla$Variable[vif_tabla$VIF > 10]
+vars_moderadas <- vif_tabla$Variable[vif_tabla$VIF > 5 & vif_tabla$VIF <= 10]
+
+if(length(vars_severas) > 0) {
+  cat("\n❌ Variables con multicolinealidad SEVERA (VIF > 10):\n")
+  for(v in vars_severas) {
+    cat(sprintf("   - %s: VIF = %.2f\n", v, vif_valores[v]))
+  }
+  cat("\nACCIÓN RECOMENDADA: Eliminar estas variables del modelo\n")
+}
+
+if(length(vars_moderadas) > 0) {
+  cat("\n⚠️  Variables con multicolinealidad MODERADA (VIF 5-10):\n")
+  for(v in vars_moderadas) {
+    cat(sprintf("   - %s: VIF = %.2f\n", v, vif_valores[v]))
+  }
+}
+
+if(length(vars_severas) == 0 && length(vars_moderadas) == 0) {
+  cat("\n✓ No se detectó multicolinealidad problemática en el modelo\n")
+}
+
+# Gráfico de VIF
+ggplot(vif_tabla, aes(x = reorder(Variable, VIF), y = VIF, fill = Problema)) +
+  geom_col(alpha = 0.8) +
+  geom_hline(yintercept = 5, linetype = "dashed", color = "orange", size = 1) +
+  geom_hline(yintercept = 10, linetype = "dashed", color = "red", size = 1) +
+  scale_fill_manual(values = c("✓ OK" = "#06A77D", 
+                               "⚠️  MODERADO" = "#F39C12", 
+                               "❌ SEVERO" = "#E63946")) +
+  coord_flip() +
+  labs(title = "Factor de Inflación de Varianza (VIF)",
+       subtitle = "Línea naranja: VIF=5 | Línea roja: VIF=10",
+       x = "Variable",
+       y = "VIF",
+       fill = "Estado") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        legend.position = "bottom")
+```
+
+## Detección de heterocedasticidad (Prueba de Park)
+
+```{r}
+cat("Objetivo: Detectar si la varianza de los errores depende de alguna variable X\n")
+cat("Método: Regresión ln(e^2) = α + β*ln(X) + u\n")
+cat("Criterio: Si β es significativo (p < 0.05), HAY heterocedasticidad\n\n")
+
+# Modelo múltiple original
+modelo_park <- lm(Brecha_salarial ~ Tasa_participacion + Puestos_direccion + 
+                  PIB + Presupuesto + Poblacion_activa + 
+                  Ingreso_min_hombres + Ingreso_min_mujeres, data = datos)
+
+cat("MODELO ORIGINAL\n")
+summary(modelo_park)
+```
+
+```{r}
+# Obtener residuos
+res <- abs(residuals(modelo_park))
+datos$residuals <- res
+datos$residuals2 <- res^2
+
+# Crear variables logarítmicas (evitar log de 0 o negativos)
+datos$log_tasa_participacion <- log(datos$Tasa_participacion)
+datos$log_PIB <- log(datos$PIB)
+datos$log_presupuesto <- log(datos$Presupuesto)
+datos$log_poblacion_activa <- log(datos$Poblacion_activa)
+datos$log_ingreso_min_hombres <- log(datos$Ingreso_min_hombres)
+datos$log_ingreso_min_mujeres <- log(datos$Ingreso_min_mujeres)
+
+cat("\nRESULTADOS PRUEBA DE PARK\n")
+
+# Prueba de Park para cada variable
+variables_park <- list(
+  "Tasa_participacion" = "log_tasa_participacion",
+  "PIB" = "log_PIB",
+  "Presupuesto" = "log_presupuesto",
+  "Poblacion_activa" = "log_poblacion_activa",
+  "Ingreso_min_hombres" = "log_ingreso_min_hombres",
+  "Ingreso_min_mujeres" = "log_ingreso_min_mujeres"
+)
+
+resultados_park <- data.frame()
+
+for(var_nombre in names(variables_park)) {
+  var_log <- variables_park[[var_nombre]]
+  
+  # Modelo de Park
+  formula_park <- as.formula(paste("residuals2 ~", var_log))
+  modelo_park_test <- lm(formula_park, data = datos)
+  
+  # Extraer resultados
+  coef_park <- summary(modelo_park_test)$coefficients
+  beta <- coef_park[2, 1]
+  p_value <- coef_park[2, 4]
+  r2 <- summary(modelo_park_test)$r.squared
+  
+  # Guardar en tabla
+  resultados_park <- rbind(resultados_park, data.frame(
+    Variable = var_nombre,
+    Beta = beta,
+    P_value = p_value,
+    R2 = r2,
+    Heterocedasticidad = ifelse(p_value < 0.05, "❌ SÍ", "✓ NO")
+  ))
+  
+  # Imprimir resultado individual
+  cat(sprintf("\n%s\n", var_nombre))
+  cat(sprintf("  β = %.6f\n", beta))
+  cat(sprintf("  p-value = %.6f\n", p_value))
+  cat(sprintf("  R^2 = %.4f\n", r2))
+  if(p_value < 0.05) {
+    cat(sprintf("  ❌ HAY heterocedasticidad relacionada con %s\n", var_nombre))
+  } else {
+    cat(sprintf("  ✓ NO hay heterocedasticidad relacionada con %s\n", var_nombre))
+  }
+}
+
+# Tabla resumen
+cat("\nRESUMEN PRUEBA DE PARK\n")
+print(resultados_park)
+
+# Identificar variables problemáticas
+vars_problematicas <- resultados_park$Variable[resultados_park$P_value < 0.05]
+if(length(vars_problematicas) > 0) {
+  cat("\n❌ VARIABLES CON HETEROCEDASTICIDAD DETECTADA:\n")
+  for(v in vars_problematicas) {
+    cat(sprintf("   - %s\n", v))
+  }
+  cat("\n📋 RECOMENDACIONES:\n")
+  cat("   1. Transformar la variable dependiente: usar log(Brecha_salarial)\n")
+  cat("   2. Transformar las variables independientes problemáticas\n")
+  cat("   3. Usar errores estándar robustos (HC)\n")
+  cat("   4. Aplicar Mínimos Cuadrados Ponderados (WLS)\n")
+} else {
+  cat("\n✓ NO se detectó heterocedasticidad en ninguna variable\n")
+  cat("El modelo cumple el supuesto de homocedasticidad\n")
+}
+```
+
+```{r}
+# Visualizaciones
+
+# Gráfico 1: Tasa de participación
+ggplot(datos, aes(x = log_tasa_participacion, y = residuals2)) +
+  geom_point(color = "#E63946", size = 3, alpha = 0.7) +
+  geom_smooth(method = "lm", se = TRUE, color = "#457B9D", fill = "#457B9D", alpha = 0.2) +
+  labs(title = "Prueba de Park: Tasa de Participación Femenina",
+       subtitle = sprintf("β = %.4f, p-value = %.4f", 
+                         resultados_park$Beta[resultados_park$Variable == "Tasa_participacion"],
+                         resultados_park$P_value[resultados_park$Variable == "Tasa_participacion"]),
+       x = "Log(Tasa de participación femenina)",
+       y = "Residuos al cuadrado") +
+  theme_minimal(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", size = 14))
+
+# Gráfico 2: PIB
+ggplot(datos, aes(x = log_PIB, y = residuals2)) +
+  geom_point(color = "#F77F00", size = 3, alpha = 0.7) +
+  geom_smooth(method = "lm", se = TRUE, color = "#06A77D", fill = "#06A77D", alpha = 0.2) +
+  labs(title = "Prueba de Park: PIB",
+       subtitle = sprintf("β = %.4f, p-value = %.4f", 
+                         resultados_park$Beta[resultados_park$Variable == "PIB"],
+                         resultados_park$P_value[resultados_park$Variable == "PIB"]),
+       x = "Log(PIB)",
+       y = "Residuos al cuadrado") +
+  theme_minimal(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", size = 14))
+
+# Gráfico 3: Presupuesto
+ggplot(datos, aes(x = log_presupuesto, y = residuals2)) +
+  geom_point(color = "#9B59B6", size = 3, alpha = 0.7) +
+  geom_smooth(method = "lm", se = TRUE, color = "#16A085", fill = "#16A085", alpha = 0.2) +
+  labs(title = "Prueba de Park: Presupuesto",
+       subtitle = sprintf("β = %.4f, p-value = %.4f", 
+                         resultados_park$Beta[resultados_park$Variable == "Presupuesto"],
+                         resultados_park$P_value[resultados_park$Variable == "Presupuesto"]),
+       x = "Log(Presupuesto)",
+       y = "Residuos al cuadrado") +
+  theme_minimal(base_size = 12) +
+  theme(plot.title = element_text(face = "bold", size = 14))
+
+# Gráfico 4: Comparación múltiple
+datos_park_largo <- datos %>%
+  select(residuals2, log_tasa_participacion, log_PIB, log_presupuesto, 
+         log_poblacion_activa, log_ingreso_min_mujeres) %>%
+  pivot_longer(cols = -residuals2, names_to = "Variable", values_to = "Log_Valor") %>%
+  mutate(Variable = gsub("log_", "", Variable))
+
+ggplot(datos_park_largo, aes(x = Log_Valor, y = residuals2)) +
+  geom_point(color = "#E63946", alpha = 0.6, size = 2) +
+  geom_smooth(method = "lm", se = TRUE, color = "#457B9D", fill = "#457B9D", alpha = 0.2) +
+  facet_wrap(~ Variable, scales = "free_x", ncol = 3) +
+  labs(title = "Prueba de Park: Análisis por Variable",
+       subtitle = "Residuos^2 vs Log(Variables Independientes)",
+       x = "Log(Variable)",
+       y = "Residuos al cuadrado") +
+  theme_minimal(base_size = 10) +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        strip.text = element_text(face = "bold"))
+
+# Gráfico de barras con p-values
+ggplot(resultados_park, aes(x = reorder(Variable, -P_value), y = P_value, 
+                            fill = Heterocedasticidad)) +
+  geom_col(alpha = 0.8) +
+  geom_hline(yintercept = 0.05, linetype = "dashed", color = "red", size = 1) +
+  scale_fill_manual(values = c("✓ NO" = "#06A77D", "❌ SÍ" = "#E63946")) +
+  coord_flip() +
+  labs(title = "Prueba de Park: P-values por Variable",
+       subtitle = "Línea roja: nivel de significancia α = 0.05",
+       x = "Variable",
+       y = "P-value",
+       fill = "Heterocedasticidad") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        legend.position = "bottom")
+```
+
+Aunque la matriz de correlaciones muestra que hay multicolinealidad entre varias variables, este resultado no contradice la prueba de Park. Ambas técnicas evalúan supuestos diferentes del modelo de regresión: la matriz de correlaciones detecta relaciones excesivamente fuertes entre los predictores, lo cual afecta la estabilidad de los coeficientes y la estimación matricial; en cambio, la prueba de Park analiza la varianza de los errores y determina si existe heterocedasticidad. Que no se haya detectado heterocedasticidad significa que los residuos presentan varianza constante, pero ello no implica ausencia de multicolinealidad.
+
+## Anderson Darling
+
+```{r}
+cat("\nTEST DE ANDERSON-DARLING\n")
+
+cat("Objetivo: Probar si los residuos siguen una distribución normal\n")
+cat("H0: Los residuos siguen una distribución normal\n")
+cat("H1: Los residuos NO siguen una distribución normal\n")
+cat("Criterio: Si p-value > 0.05, NO rechazamos H0 (residuos normales) ✓\n\n")
+
+residuos <- residuals(modelo_completo)
+ad_test <- ad.test(residuos)
+
+cat("\nRESULTADOS\n")
+cat(sprintf("Estadístico A = %.4f\n", ad_test$statistic))
+cat(sprintf("p-value = %.6f ", ad_test$p.value))
+
+if(ad_test$p.value > 0.05) {
+  cat("✓ Los residuos SON normales\n")
+  cat("\nInterpretación:\n")
+  cat("  - Se cumple el supuesto de normalidad\n")
+  cat("  - Las pruebas t y F son confiables\n")
+  cat("  - Los intervalos de confianza son válidos\n")
+} else {
+  cat("❌ Los residuos NO son normales\n")
+  cat("\nInterpretación:\n")
+  cat("  - Puede haber valores atípicos en los datos\n")
+  cat("  - La distribución puede ser asimétrica o tener colas pesadas\n")
+  cat("  - Las inferencias estadísticas pueden no ser confiables\n")
+  cat("\nSoluciones sugeridas:\n")
+  cat("  1. Identificar y tratar valores atípicos\n")
+  cat("  2. Transformar la variable dependiente (log, raíz cuadrada)\n")
+  cat("  3. Usar métodos robustos o bootstrap\n")
+  cat("  4. Aumentar el tamaño de muestra si es posible\n")
+}
+
+# Gráfico Q-Q Plot
+qqnorm(residuos, main = "Q-Q Plot: Normalidad de Residuos (Modelo CON PIB)",
+       pch = 19, col = "#E63946", cex = 1.2)
+qqline(residuos, col = "#457B9D", lwd = 2)
+grid()
+
+# Histograma de residuos con curva normal
+hist(residuos, breaks = 10, col = "#E63946", border = "white",
+     main = "Distribución de Residuos (Modelo CON PIB)",
+     xlab = "Residuos", ylab = "Frecuencia", prob = TRUE)
+curve(dnorm(x, mean = mean(residuos), sd = sd(residuos)),
+      add = TRUE, col = "#457B9D", lwd = 3)
+legend("topright", legend = "Distribución Normal Teórica", 
+       col = "#457B9D", lwd = 3, bty = "n")
+```
+
+## Test CIA
+
+```{r}
+cat("Objetivo: Verificar que los errores son independientes condicional a X\n")
+cat("         (No hay correlación entre residuos y variables independientes)\n\n")
+cat("H0: E(u|X) = 0  (Los errores son independientes de las X's)\n")
+cat("H1: E(u|X) ≠ 0  (Hay correlación entre errores y X's)\n\n")
+
+# Obtener residuos
+residuos <- residuals(modelo_completo)
+
+# Obtener variables independientes
+X_vars <- datos[, c("Tasa_participacion", "Puestos_direccion", "PIB", 
+                    "Presupuesto", "Poblacion_activa", 
+                    "Ingreso_min_hombres", "Ingreso_min_mujeres")]
+
+cat("=== CORRELACIONES: RESIDUOS vs VARIABLES INDEPENDIENTES ===\n\n")
+
+# Calcular correlaciones entre residuos y cada X
+correlaciones_CIA <- data.frame(
+  Variable = names(X_vars),
+  Correlacion = numeric(ncol(X_vars)),
+  P_value = numeric(ncol(X_vars))
+)
+
+for(i in 1:ncol(X_vars)) {
+  test_cor <- cor.test(residuos, X_vars[,i])
+  correlaciones_CIA$Correlacion[i] <- test_cor$estimate
+  correlaciones_CIA$P_value[i] <- test_cor$p.value
+}
+
+# Agregar columna de resultado
+correlaciones_CIA$Resultado <- ifelse(correlaciones_CIA$P_value > 0.05, 
+                                      "✓ Independiente", 
+                                      "❌ Correlacionado")
+
+print(correlaciones_CIA)
+
+cat("\n--- INTERPRETACIÓN ---\n")
+cat("Si p-value > 0.05: Los residuos son independientes de esa variable ✓\n")
+cat("Si p-value < 0.05: Hay correlación (viola CIA) ❌\n\n")
+
+# Contar cuántas variables cumplen CIA
+cumple_CIA <- sum(correlaciones_CIA$P_value > 0.05)
+total_vars <- nrow(correlaciones_CIA)
+
+cat(sprintf("Variables que cumplen CIA: %d/%d\n\n", cumple_CIA, total_vars))
+
+if(cumple_CIA == total_vars) {
+  cat("✓ EL MODELO CUMPLE EL SUPUESTO CIA\n")
+  cat("\nSignificado:\n")
+  cat("  - Los errores NO están correlacionados con las variables independientes\n")
+  cat("  - E(u|X) = 0 se cumple\n")
+  cat("  - Los estimadores son INSESGADOS\n")
+  cat("  - El modelo está bien especificado\n")
+} else {
+  cat("❌ EL MODELO VIOLA EL SUPUESTO CIA\n")
+  cat("\nVariables problemáticas:\n")
+  vars_problema <- correlaciones_CIA$Variable[correlaciones_CIA$P_value <= 0.05]
+  for(v in vars_problema) {
+    cat(sprintf("  - %s\n", v))
+  }
+  cat("\nSignificado:\n")
+  cat("  - Hay correlación entre errores y algunas X's\n")
+  cat("  - Los estimadores pueden estar SESGADOS\n")
+  cat("  - Problema de ENDOGENEIDAD\n")
+  cat("\nPosibles causas:\n")
+  cat("  1. Variables omitidas relevantes\n")
+  cat("  2. Errores de medición en las variables\n")
+  cat("  3. Simultaneidad (causalidad bidireccional)\n")
+  cat("  4. Especificación incorrecta del modelo\n")
+  cat("\nSoluciones:\n")
+  cat("  1. Agregar variables de control relevantes\n")
+  cat("  2. Usar Variables Instrumentales (VI/2SLS)\n")
+  cat("  3. Respecificar el modelo\n")
+  cat("  4. Transformar variables\n")
+}
+
+# Gráfico: Residuos vs cada variable independiente
+par(mfrow = c(3, 3))
+for(i in 1:ncol(X_vars)) {
+  plot(X_vars[,i], residuos, 
+       main = paste("Residuos vs", names(X_vars)[i]),
+       xlab = names(X_vars)[i],
+       ylab = "Residuos",
+       pch = 19, col = ifelse(correlaciones_CIA$P_value[i] > 0.05, "#06A77D", "#E63946"),
+       cex = 1.5)
+  abline(h = 0, col = "#457B9D", lwd = 2, lty = 2)
+  abline(lm(residuos ~ X_vars[,i]), col = "red", lwd = 2)
+  grid()
+}
+par(mfrow = c(1, 1))
+
+# Gráfico resumen de correlaciones
+library(ggplot2)
+ggplot(correlaciones_CIA, aes(x = reorder(Variable, abs(Correlacion)), 
+                               y = Correlacion, fill = Resultado)) +
+  geom_col(alpha = 0.8) +
+  geom_hline(yintercept = 0, linetype = "solid", color = "black", size = 1) +
+  scale_fill_manual(values = c("✓ Independiente" = "#06A77D", 
+                               "❌ Correlacionado" = "#E63946")) +
+  coord_flip() +
+  labs(title = "Test CIA: Correlación Residuos vs Variables Independientes",
+       x = "Variable",
+       y = "Correlación con residuos",
+       fill = "Estado") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        legend.position = "bottom")
+
+# Test adicional: Regresión auxiliar (más formal)
+cat("\n\n=== TEST FORMAL CIA (Regresión Auxiliar) ===\n")
+cat("Regresión: residuos ~ X1 + X2 + ... + Xk\n")
+cat("H0: Todos los coeficientes = 0 (CIA se cumple)\n")
+cat("H1: Al menos un coeficiente ≠ 0 (CIA se viola)\n\n")
+
+# Regresión de residuos sobre las X's
+modelo_CIA <- lm(residuos ~ Tasa_participacion + Puestos_direccion + PIB + 
+                 Presupuesto + Poblacion_activa + Ingreso_min_hombres + 
+                 Ingreso_min_mujeres, data = datos)
+
+# Test F global
+f_test <- summary(modelo_CIA)$fstatistic
+p_value_global <- pf(f_test[1], f_test[2], f_test[3], lower.tail = FALSE)
+
+cat(sprintf("Estadístico F = %.4f\n", f_test[1]))
+cat(sprintf("Grados de libertad: %d, %d\n", f_test[2], f_test[3]))
+cat(sprintf("p-value = %.6f ", p_value_global))
+
+if(p_value_global > 0.05) {
+  cat("✓ CIA se CUMPLE (globalmente)\n")
+  cat("   Los residuos son conjuntamente independientes de todas las X's\n")
+} else {
+  cat("❌ CIA se VIOLA (globalmente)\n")
+  cat("   Hay correlación conjunta entre residuos y X's\n")
+}
+
+cat("\n\nR^2 de la regresión auxiliar:", sprintf("%.4f", summary(modelo_CIA)$r.squared))
+cat("\n(Un R^2 bajo indica que los residuos no se explican por las X's, lo cual es bueno)\n")
+```
+
+## ANOVA
+
+```{r}
+str(datos)
+summary(datos)
+
+datos$Año <- as.factor(datos$Año)
+
+# ANOVA paso a paso
+datos_año <- datos |> select(Brecha_salarial, Año)
+media_brecha <- mean(datos$Brecha_salarial, na.rm = TRUE)
+
+datos_año_grupos <- datos_año |> 
+  group_by(Año) |> 
+  summarise(
+    n_i = n(), 
+    media_grupo = mean(Brecha_salarial, na.rm = TRUE), 
+    var_grupo = var(Brecha_salarial, na.rm = TRUE)
+  )
+
+datos_año_grupos <- datos_año_grupos |> 
+  ungroup() |> 
+  mutate(SSB = n_i * (media_grupo - media_brecha)^2)
+
+# Calcular estadísticos
+k <- nlevels(datos$Año)
+n <- nrow(datos)
+SSB <- sum(datos_año_grupos$SSB, na.rm = TRUE)
+MSB <- SSB / (k - 1)
+
+datos <- left_join(datos, select(datos_año_grupos, Año, media_grupo), by = "Año")
+datos <- datos |> mutate(SSW = (Brecha_salarial - media_grupo)^2)
+SSW <- sum(datos$SSW, na.rm = TRUE)
+MSW <- SSW / (n - k)
+
+F_0 <- MSB / MSW
+valor_p <- pf(F_0, k - 1, n - k, lower.tail = FALSE)
+
+cat("\nANOVA Manual: Brecha_salarial ~ Año\n")
+cat("SSB (Between):", SSB, "\n")
+cat("MSB:", MSB, "\n")
+cat("SSW (Within):", SSW, "\n")
+cat("MSW:", MSW, "\n")
+cat("F-statistic:", F_0, "\n")
+cat("p-value:", valor_p, "\n\n")
+
+# ANOVA con función aov()
+anova_año <- aov(Brecha_salarial ~ Año, data = datos)
+summary(anova_año)
+
+datos$PIB_cat <- cut(datos$PIB, 
+                     breaks = quantile(datos$PIB, probs = c(0, 0.33, 0.67, 1), na.rm = TRUE),
+                     labels = c("Bajo", "Medio", "Alto"),
+                     include.lowest = TRUE)
+
+anova_pib <- aov(Brecha_salarial ~ PIB_cat, data = datos)
+summary(anova_pib)
+
+
+# ANOVA: Brecha_salarial ~ Tasa_participacion (categorizada)
+datos$Tasa_part_cat <- cut(datos$Tasa_participacion,
+                            breaks = quantile(datos$Tasa_participacion, probs = c(0, 0.33, 0.67, 1), na.rm = TRUE),
+                            labels = c("Baja", "Media", "Alta"),
+                            include.lowest = TRUE)
+
+anova_tasa <- aov(Brecha_salarial ~ Tasa_part_cat, data = datos)
+summary(anova_tasa)
+
+# ANOVA: Brecha_salarial ~ Presupuesto (categorizado)
+datos$Presupuesto_cat <- cut(datos$Presupuesto,
+                              breaks = quantile(datos$Presupuesto, probs = c(0, 0.33, 0.67, 1), na.rm = TRUE),
+                              labels = c("Bajo", "Medio", "Alto"),
+                              include.lowest = TRUE)
+
+anova_presup <- aov(Brecha_salarial ~ Presupuesto_cat, data = datos)
+summary(anova_presup)
+
+# ANOVA: Brecha_salarial ~ Puestos_direccion (categorizado)
+datos$Puestos_dir_cat <- cut(datos$Puestos_direccion,
+                              breaks = quantile(datos$Puestos_direccion, probs = c(0, 0.33, 0.67, 1), na.rm = TRUE),
+                              labels = c("Bajo", "Medio", "Alto"),
+                              include.lowest = TRUE)
+
+anova_puestos <- aov(Brecha_salarial ~ Puestos_dir_cat, data = datos)
+summary(anova_puestos)
+
+# Boxplot: Brecha salarial por Año
+ggplot(datos, aes(x = Año, y = Brecha_salarial, fill = Año)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Distribución de Brecha Salarial por Año",
+       x = "Año", y = "Brecha Salarial") +
+  theme(legend.position = "none")
+
+
+# Ejemplo con Tukey HSD para comparaciones múltiples
+if(!is.na(valor_p) && valor_p < 0.05) {
+  tukey_año <- TukeyHSD(anova_año)
+  print(tukey_año)
+  plot(tukey_año)
+} else if(is.na(valor_p)) {
+  cat("Advertencia: No se pudo calcular el valor de p porque hay NAs en los datos.\n")
+}
+
+# Resumen de todos los ANOVAs
+
+cat("\nRESUMEN DE RESULTADOS\n")
+cat("\n1. Brecha_salarial ~ Año:\n")
+print(summary(anova_año))
+
+cat("\n2. Brecha_salarial ~ PIB_cat:\n")
+print(summary(anova_pib))
+
+cat("\n3. Brecha_salarial ~ Tasa_part_cat:\n")
+print(summary(anova_tasa))
+
+cat("\n4. Brecha_salarial ~ Presupuesto_cat:\n")
+print(summary(anova_presup))
+
+cat("\n5. Brecha_salarial ~ Puestos_dir_cat:\n")
+print(summary(anova_puestos))
+```
+
+# MODELO SIN TRES VARIABLES.
+
+Nos quedamos sólo con PIB, Tasa de participación, Puestos de dirección y Población económicamnete activa ya que estas variables no son problemáticas.
+
+$$
+Brecha\ salarial = PIB + Tasa\ de\ participación + Puestos\ de\ alta\ dirección + Población\ económicamente\ activa
+$$
+
+## Modelo de correlación (Detectar colinealidad) (Matriz de correlaciones que detectan colinealidad.)
+
+```{r}
+datos_clean <- datos %>% 
+  filter(!is.na(Brecha_salarial) & 
+         !is.na(PIB) & 
+         !is.na(Tasa_participacion) & 
+         !is.na(Puestos_direccion) & 
+         !is.na(Poblacion_activa))
+
+cat("\nANÁLISIS DE CORRELACIÓN\n")
+
+# Matriz de correlación de variables independientes
+vars_independientes <- datos_clean %>% 
+  select(PIB, Tasa_participacion, Puestos_direccion, Poblacion_activa)
+
+matriz_corr <- cor(vars_independientes)
+cat("\nMatriz de Correlación entre Variables Independientes:\n")
+print(round(matriz_corr, 3))
+
+# Identificar correlaciones altas (> 0.8 o < -0.8)
+cat("\nCORRELACIONES ALTAS (|r| > 0.8)\n")
+
+correlaciones_altas <- which(abs(matriz_corr) > 0.8 & matriz_corr != 1, arr.ind = TRUE)
+if(nrow(correlaciones_altas) > 0) {
+  for(i in 1:nrow(correlaciones_altas)) {
+    var1 <- rownames(matriz_corr)[correlaciones_altas[i,1]]
+    var2 <- colnames(matriz_corr)[correlaciones_altas[i,2]]
+    valor <- matriz_corr[correlaciones_altas[i,1], correlaciones_altas[i,2]]
+    if(correlaciones_altas[i,1] < correlaciones_altas[i,2]) {  # Evitar duplicados
+      cat(sprintf("%s <-> %s: r = %.4f ⚠️  COLINEALIDAD SEVERA\n", var1, var2, valor))
+    }
+  }
+} else {
+  cat("\nNo se detectaron correlaciones > 0.8\n")
+}
+
+# Visualización
+corr_melted <- melt(matriz_corr)
+ggplot(corr_melted, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "#E63946", mid = "white", high = "#06A77D",
+                       midpoint = 0, limit = c(-1,1), 
+                       name = "Correlación") +
+  geom_text(aes(label = round(value, 2)), size = 4) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+        axis.text.y = element_text(size = 10),
+        plot.title = element_text(face = "bold", size = 14)) +
+  labs(title = "Matriz de Correlaciones - Detección de Multicolinealidad",
+       subtitle = "Valores cercanos a ±1 indican colinealidad",
+       x = "", y = "")
+
+
+cat("\nMODELO DE REGRESIÓN LINEAL MÚLTIPLE\n")
+
+modelo_completo <- lm(Brecha_salarial ~ PIB + Tasa_participacion + 
+                      Puestos_direccion + Poblacion_activa, 
+                      data = datos_clean)
+
+cat("\nResumen del Modelo:\n")
+print(summary(modelo_completo))
+```
+
+## Análisis de multicolinealidad (VIF)
+
+```{r}
+cat("\nANÁLISIS DE MULTICOLINEALIDAD (VIF)\n")
+
+cat("\nInterpretación:\n")
+cat("  VIF < 5:  ✓ No hay multicolinealidad problemática\n")
+cat("  VIF 5-10: ⚠️  Multicolinealidad moderada\n")
+cat("  VIF > 10: ❌ Multicolinealidad severa (eliminar variable)\n\n")
+
+# Calcular VIF
+vif_valores <- vif(modelo_completo)
+
+# Crear tabla ordenada de VIF
+vif_tabla <- data.frame(
+  Variable = names(vif_valores),
+  VIF = as.numeric(vif_valores),
+  Problema = ifelse(vif_valores > 10, "❌ SEVERO", 
+                   ifelse(vif_valores > 5, "⚠️  MODERADO", "✓ OK"))
+)
+vif_tabla <- vif_tabla[order(-vif_tabla$VIF),]
+rownames(vif_tabla) <- NULL
+
+cat("\nTabla de VIF:\n")
+print(vif_tabla)
+
+# Identificar variables problemáticas
+cat("\nRESUMEN DE MULTICOLINEALIDAD\n")
+
+vars_severas <- vif_tabla$Variable[vif_tabla$VIF > 10]
+vars_moderadas <- vif_tabla$Variable[vif_tabla$VIF > 5 & vif_tabla$VIF <= 10]
+
+if(length(vars_severas) > 0) {
+  cat("\n❌ Variables con multicolinealidad SEVERA (VIF > 10):\n")
+  for(v in vars_severas) {
+    cat(sprintf("   - %s: VIF = %.2f\n", v, vif_valores[v]))
+  }
+  cat("\nACCIÓN RECOMENDADA: Eliminar estas variables del modelo\n")
+}
+
+if(length(vars_moderadas) > 0) {
+  cat("\n⚠️  Variables con multicolinealidad MODERADA (VIF 5-10):\n")
+  for(v in vars_moderadas) {
+    cat(sprintf("   - %s: VIF = %.2f\n", v, vif_valores[v]))
+  }
+  cat("\nACCIÓN RECOMENDADA: Considerar eliminar o mantener bajo supervisión\n")
+}
+
+if(length(vars_severas) == 0 && length(vars_moderadas) == 0) {
+  cat("\n✓ No se detectó multicolinealidad problemática en el modelo\n")
+  cat("Todas las variables pueden permanecer en el modelo\n")
+}
+
+# Gráfico de VIF
+ggplot(vif_tabla, aes(x = reorder(Variable, VIF), y = VIF, fill = Problema)) +
+  geom_col(alpha = 0.8) +
+  geom_hline(yintercept = 5, linetype = "dashed", color = "orange", linewidth = 1) +
+  geom_hline(yintercept = 10, linetype = "dashed", color = "red", linewidth = 1) +
+  geom_text(aes(label = round(VIF, 2)), hjust = -0.2, size = 4) +
+  scale_fill_manual(values = c("✓ OK" = "#06A77D", 
+                               "⚠️  MODERADO" = "#F39C12", 
+                               "❌ SEVERO" = "#E63946")) +
+  coord_flip() +
+  labs(title = "Factor de Inflación de Varianza (VIF)",
+       subtitle = "Línea naranja: VIF=5 | Línea roja: VIF=10",
+       x = "Variable",
+       y = "VIF",
+       fill = "Estado") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        legend.position = "bottom")
+
+
+cat("\nINTERPRETACIÓN DEL MODELO\n")
+
+coef_modelo <- summary(modelo_completo)$coefficients
+cat("\nCoeficientes significativos (p < 0.05):\n")
+significativos <- coef_modelo[coef_modelo[,4] < 0.05, ]
+if(nrow(significativos) > 0) {
+  for(i in 1:nrow(significativos)) {
+    var_name <- rownames(significativos)[i]
+    coef_val <- significativos[i, 1]
+    p_val <- significativos[i, 4]
+    if(var_name != "(Intercept)") {
+      cat(sprintf("✓ %s: β = %.4f (p = %.4f)\n", var_name, coef_val, p_val))
+      if(coef_val > 0) {
+        cat(sprintf("   → Al aumentar %s, la Brecha Salarial AUMENTA\n", var_name))
+      } else {
+        cat(sprintf("   → Al aumentar %s, la Brecha Salarial DISMINUYE\n", var_name))
+      }
+    }
+  }
+} else {
+  cat("\nNo hay variables significativas en el modelo\n")
+}
+
+# R^2
+r2 <- summary(modelo_completo)$r.squared
+r2_adj <- summary(modelo_completo)$adj.r.squared
+cat(sprintf("\nR^2 = %.4f (R^2 ajustado = %.4f)\n", r2, r2_adj))
+cat(sprintf("El modelo explica el %.2f%% de la variabilidad en la Brecha Salarial\n", r2*100))
+```
+
+## Detección de heterocedasticidad (Prueba de Park)
+
+```{r}
+cat("\nPRUEBA DE PARK\n")
+
+cat("Objetivo: Detectar si la varianza de los errores depende de alguna variable X\n")
+cat("Criterio: Si β es significativo (p < 0.05), HAY heterocedasticidad\n\n")
+
+# Modelo original
+modelo_park <- lm(Brecha_salarial ~ PIB + Tasa_participacion + 
+                  Puestos_direccion + Poblacion_activa, data = datos)
+
+cat("\nMODELO ORIGINAL\n")
+summary(modelo_park)
+
+# Obtener residuos
+res <- abs(residuals(modelo_park))
+datos$residuals <- res
+datos$residuals2 <- res^2
+
+# Crear variables logarítmicas
+datos$log_PIB <- log(datos$PIB)
+datos$log_tasa_participacion <- log(datos$Tasa_participacion)
+datos$log_puestos_direccion <- log(datos$Puestos_direccion)
+datos$log_poblacion_activa <- log(datos$Poblacion_activa)
+
+cat("\nRESULTADOS PRUEBA DE PARK\n")
+
+# Definir las 4 variables a analizar
+variables_park <- list(
+  "PIB" = "log_PIB",
+  "Tasa_participacion" = "log_tasa_participacion",
+  "Puestos_direccion" = "log_puestos_direccion",
+  "Poblacion_activa" = "log_poblacion_activa"
+)
+
+nombres_variables <- c("PIB", "Tasa de Participación Femenina", 
+                       "Puestos de Dirección (Mujeres)", 
+                       "Población Económicamente Activa")
+
+resultados_park <- data.frame()
+
+# Prueba de Park para cada variable
+for(i in 1:length(variables_park)) {
+  var_nombre <- names(variables_park)[i]
+  var_log <- variables_park[[i]]
+  
+  # Modelo de Park
+  formula_park <- as.formula(paste("residuals2 ~", var_log))
+  modelo_park_test <- lm(formula_park, data = datos)
+  
+  # Extraer resultados
+  coef_park <- summary(modelo_park_test)$coefficients
+  beta <- coef_park[2, 1]
+  p_value <- coef_park[2, 4]
+  r2 <- summary(modelo_park_test)$r.squared
+  
+  # Tabla
+  resultados_park <- rbind(resultados_park, data.frame(
+    Variable = nombres_variables[i],
+    Beta = beta,
+    P_value = p_value,
+    R2 = r2,
+    Heterocedasticidad = ifelse(p_value < 0.05, "❌ SÍ", "✓ NO")
+  ))
+  
+  # Imprimir resultado individual
+  cat(sprintf("\n %s \n", nombres_variables[i]))
+  cat(sprintf("  β = %.6f\n", beta))
+  cat(sprintf("  p-value = %.6f\n", p_value))
+  cat(sprintf("  R^2 = %.4f\n", r2))
+  if(p_value < 0.05) {
+    cat(sprintf("  ❌ HAY heterocedasticidad relacionada con %s\n", nombres_variables[i]))
+  } else {
+    cat(sprintf("  ✓ NO hay heterocedasticidad relacionada con %s\n", nombres_variables[i]))
+  }
+}
+
+# Tabla resumen
+cat("\nRESUMEN PRUEBA DE PARK\n")
+print(resultados_park)
+
+# Identificar variables problemáticas
+vars_problematicas <- resultados_park$Variable[resultados_park$P_value < 0.05]
+if(length(vars_problematicas) > 0) {
+  cat("\n❌ VARIABLES CON HETEROCEDASTICIDAD DETECTADA:\n")
+  for(v in vars_problematicas) {
+    cat(sprintf("   - %s\n", v))
+  }
+  cat("\n📋 RECOMENDACIONES:\n")
+  cat("   1. Transformar la variable dependiente: usar log(Brecha_salarial)\n")
+  cat("   2. Transformar las variables independientes problemáticas\n")
+  cat("   3. Usar errores estándar robustos (HC)\n")
+  cat("   4. Aplicar Mínimos Cuadrados Ponderados (WLS)\n")
+} else {
+  cat("\n✓ NO se detectó heterocedasticidad en ninguna variable\n")
+  cat("El modelo cumple el supuesto de homocedasticidad\n")
+}
+
+# Visualizaciones
+
+# Gráficos individuales para cada variable
+par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+# PIB
+plot(datos$log_PIB, datos$residuals2,
+     main = "Prueba de Park: PIB",
+     xlab = "log(PIB)",
+     ylab = "Residuos^2",
+     pch = 19, col = "#E63946", cex = 1.5)
+abline(lm(residuals2 ~ log_PIB, data = datos), col = "#457B9D", lwd = 2)
+grid()
+text(x = datos$log_PIB, y = datos$residuals2, labels = datos$Año, 
+     pos = 3, cex = 0.7, col = "gray30")
+
+# Tasa de Participación
+plot(datos$log_tasa_participacion, datos$residuals2,
+     main = "Prueba de Park: Tasa Participación",
+     xlab = "log(Tasa Participación)",
+     ylab = "Residuos^2",
+     pch = 19, col = "#F77F00", cex = 1.5)
+abline(lm(residuals2 ~ log_tasa_participacion, data = datos), 
+       col = "#06A77D", lwd = 2)
+grid()
+
+# Puestos de Dirección
+plot(datos$log_puestos_direccion, datos$residuals2,
+     main = "Prueba de Park: Puestos Dirección",
+     xlab = "log(Puestos Dirección)",
+     ylab = "Residuos^2",
+     pch = 19, col = "#9B59B6", cex = 1.5)
+abline(lm(residuals2 ~ log_puestos_direccion, data = datos), 
+       col = "#3498DB", lwd = 2)
+grid()
+
+# Población Activa
+plot(datos$log_poblacion_activa, datos$residuals2,
+     main = "Prueba de Park: Población Activa",
+     xlab = "log(Población Activa)",
+     ylab = "Residuos^2",
+     pch = 19, col = "#F39C12", cex = 1.5)
+abline(lm(residuals2 ~ log_poblacion_activa, data = datos), 
+       col = "#8E44AD", lwd = 2)
+grid()
+
+par(mfrow = c(1, 1))
+
+# Gráfico de barras con p-values
+ggplot(resultados_park, aes(x = reorder(Variable, -P_value), y = P_value, 
+                            fill = Heterocedasticidad)) +
+  geom_col(alpha = 0.8) +
+  geom_hline(yintercept = 0.05, linetype = "dashed", color = "red", size = 1) +
+  scale_fill_manual(values = c("✓ NO" = "#06A77D", "❌ SÍ" = "#E63946")) +
+  coord_flip() +
+  labs(title = "Prueba de Park: P-values por Variable",
+       subtitle = "Línea roja: nivel de significancia α = 0.05",
+       x = "Variable",
+       y = "P-value",
+       fill = "Heterocedasticidad") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        legend.position = "bottom")
+
+# Gráfico comparativo de coeficientes Beta
+ggplot(resultados_park, aes(x = reorder(Variable, abs(Beta)), y = Beta, 
+                            fill = Heterocedasticidad)) +
+  geom_col(alpha = 0.8) +
+  geom_hline(yintercept = 0, linetype = "solid", color = "black", size = 1) +
+  scale_fill_manual(values = c("✓ NO" = "#06A77D", "❌ SÍ" = "#E63946")) +
+  coord_flip() +
+  geom_text(aes(label = sprintf("%.4f", Beta)), hjust = -0.2, size = 4) +
+  labs(title = "Prueba de Park: Coeficientes Beta",
+       subtitle = "Magnitud de la relación entre varianza del error y cada variable",
+       x = "Variable",
+       y = "Coeficiente β",
+       fill = "Heterocedasticidad") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        legend.position = "bottom")
+
+
+datos_park_facet <- data.frame(
+  PIB = datos$log_PIB,
+  Tasa_participacion = datos$log_tasa_participacion,
+  Puestos_direccion = datos$log_puestos_direccion,
+  Poblacion_activa = datos$log_poblacion_activa,
+  residuals2 = datos$residuals2,
+  Año = datos$Año
+) %>%
+  pivot_longer(cols = c(PIB, Tasa_participacion, Puestos_direccion, Poblacion_activa),
+               names_to = "Variable",
+               values_to = "Valor_log")
+
+datos_park_facet$Variable <- factor(datos_park_facet$Variable,
+                                    levels = c("PIB", "Tasa_participacion", 
+                                              "Puestos_direccion", "Poblacion_activa"),
+                                    labels = nombres_variables)
+
+ggplot(datos_park_facet, aes(x = Valor_log, y = residuals2)) +
+  geom_point(aes(color = Variable), size = 3, alpha = 0.7) +
+  geom_smooth(method = "lm", se = TRUE, color = "#457B9D", 
+              fill = "#457B9D", alpha = 0.2) +
+  facet_wrap(~ Variable, scales = "free_x", ncol = 2) +
+  labs(title = "Prueba de Park: Residuos^2 vs log(Variables)",
+       subtitle = "Detección de heterocedasticidad por variable",
+       x = "log(Variable Independiente)",
+       y = "Residuos al cuadrado") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        strip.text = element_text(face = "bold", size = 11),
+        strip.background = element_rect(fill = "gray95", color = NA),
+        legend.position = "none")
+```
+
+## Anderson Darling
+
+```{r}
+# DEFINICIÓN DEL NUEVO MODELO
+modelo_nuevo <- lm(Brecha_salarial ~ PIB + Tasa_participacion + Puestos_direccion + Poblacion_activa, data = datos)
+
+# TEST DE ANDERSON-DARLING
+cat("\nTEST DE ANDERSON-DARLING\n")
+
+cat("Objetivo: Probar si los residuos siguen una distribución normal\n")
+cat("H0: Los residuos siguen una distribución normal\n")
+cat("H1: Los residuos NO siguen una distribución normal\n")
+cat("Criterio: Si p-value > 0.05, NO rechazamos H0 (residuos normales) ✓\n\n")
+
+residuos <- residuals(modelo_nuevo)
+ad_test <- ad.test(residuos)
+
+cat("\nRESULTADOS\n")
+cat(sprintf("Estadístico A = %.4f\n", ad_test$statistic))
+cat(sprintf("p-value = %.6f ", ad_test$p.value))
+
+if(ad_test$p.value > 0.05) {
+  cat("✓ Los residuos SON normales\n")
+  cat("\nInterpretación:\n")
+  cat("  - Se cumple el supuesto de normalidad\n")
+  cat("  - Las pruebas t y F son confiables\n")
+  cat("  - Los intervalos de confianza son válidos\n")
+} else {
+  cat("❌ Los residuos NO son normales\n")
+  cat("\nInterpretación:\n")
+  cat("  - Puede haber valores atípicos en los datos\n")
+  cat("  - La distribución puede ser asimétrica o tener colas pesadas\n")
+  cat("  - Las inferencias estadísticas pueden no ser confiables\n")
+  cat("\nSoluciones sugeridas:\n")
+  cat("  1. Identificar y tratar valores atípicos\n")
+  cat("  2. Transformar la variable dependiente (log, raíz cuadrada)\n")
+  cat("  3. Usar métodos robustos o bootstrap\n")
+  cat("  4. Aumentar el tamaño de muestra si es posible\n")
+}
+
+# Q-Q Plot
+qqnorm(residuos, main = "Q-Q Plot: Normalidad de Residuos",
+       pch = 19, col = "#E63946", cex = 1.2)
+qqline(residuos, col = "#457B9D", lwd = 2)
+grid()
+
+# Histograma con curva normal
+hist(residuos, breaks = 10, col = "#E63946", border = "white",
+     main = "Distribución de Residuos (Modelo NUEVO)",
+     xlab = "Residuos", ylab = "Frecuencia", prob = TRUE)
+curve(dnorm(x, mean = mean(residuos), sd = sd(residuos)),
+      add = TRUE, col = "#457B9D", lwd = 3)
+legend("topright", legend = "Distribución Normal Teórica", 
+       col = "#457B9D", lwd = 3, bty = "n")
+
+```
+
+## Test CIA
+
+```{r}
+cat("Objetivo: Verificar que los errores son independientes condicional a X\n")
+cat("         (No hay correlación entre residuos y variables independientes)\n\n")
+cat("H0: E(u|X) = 0  (Los errores son independientes de las X's)\n")
+cat("H1: E(u|X) ≠ 0  (Hay correlación entre errores y X's)\n\n")
+
+# Residuos del NUEVO modelo
+residuos <- residuals(modelo_nuevo)
+
+# Variables independientes del modelo NUEVO
+X_vars <- datos[, c("PIB", "Tasa_participacion",
+                    "Puestos_direccion", "Poblacion_activa")]
+
+cat("\nCORRELACIONES: RESIDUOS vs VARIABLES INDEPENDIENTES\n")
+
+# Tabla de resultados
+correlaciones_CIA <- data.frame(
+  Variable = names(X_vars),
+  Correlacion = numeric(ncol(X_vars)),
+  P_value = numeric(ncol(X_vars))
+)
+
+for(i in 1:ncol(X_vars)) {
+  test_cor <- cor.test(residuos, X_vars[,i])
+  correlaciones_CIA$Correlacion[i] <- test_cor$estimate
+  correlaciones_CIA$P_value[i] <- test_cor$p.value
+}
+
+# Resultado por variable
+correlaciones_CIA$Resultado <- ifelse(
+  correlaciones_CIA$P_value > 0.05,
+  "✓ Independiente",
+  "❌ Correlacionado"
+)
+
+print(correlaciones_CIA)
+
+cat("\nINTERPRETACIÓN\n")
+cat("Si p-value > 0.05: Los residuos son independientes de esa variable ✓\n")
+cat("Si p-value < 0.05: Hay correlación (viola CIA) ❌\n\n")
+
+# Contador
+cumple_CIA <- sum(correlaciones_CIA$P_value > 0.05)
+total_vars <- nrow(correlaciones_CIA)
+cat(sprintf("Variables que cumplen CIA: %d/%d\n\n", cumple_CIA, total_vars))
+
+if(cumple_CIA == total_vars) {
+  cat("✓ EL MODELO CUMPLE EL SUPUESTO CIA\n")
+  cat("\nSignificado:\n")
+  cat("  - Los errores NO están correlacionados con las X\n")
+  cat("  - E(u|X) = 0 se cumple\n")
+  cat("  - Los estimadores son INSESGADOS\n")
+} else {
+  cat("❌ EL MODELO VIOLA EL SUPUESTO CIA\n")
+  cat("\nVariables problemáticas:\n")
+  vars_problema <- correlaciones_CIA$Variable[correlaciones_CIA$P_value <= 0.05]
+  for(v in vars_problema) cat(sprintf("  - %s\n", v))
+  
+  cat("\nSignificado:\n")
+  cat("  - Los errores están correlacionados con algunas X's\n")
+  cat("  - El modelo puede estar MAL ESPECIFICADO o tener ENDOGENEIDAD\n")
+}
+
+# GRÁFICOS: Residuos vs X
+par(mfrow = c(2, 2))
+for(i in 1:ncol(X_vars)) {
+  plot(X_vars[,i], residuos,
+       main = paste("Residuos vs", names(X_vars)[i]),
+       xlab = names(X_vars)[i],
+       ylab = "Residuos",
+       pch = 19,
+       col = ifelse(correlaciones_CIA$P_value[i] > 0.05, "#06A77D", "#E63946"),
+       cex = 1.5)
+  abline(h = 0, col = "#457B9D", lwd = 2, lty = 2)
+  abline(lm(residuos ~ X_vars[,i]), col = "red", lwd = 2)
+  grid()
+}
+par(mfrow = c(1, 1))
+
+# GRÁFICO RESUMEN DE CORRELACIONES
+ggplot(correlaciones_CIA, aes(x = reorder(Variable, abs(Correlacion)),
+                              y = Correlacion, fill = Resultado)) +
+  geom_col(alpha = 0.8) +
+  geom_hline(yintercept = 0, color = "black") +
+  scale_fill_manual(values = c("✓ Independiente" = "#06A77D",
+                               "❌ Correlacionado" = "#E63946")) +
+  coord_flip() +
+  labs(title = "Test CIA: Correlación Residuos vs Variables Independientes",
+       x = "Variable",
+       y = "Correlación con residuos",
+       fill = "Estado") +
+  theme_minimal()
+```
+
+## ANOVA sin tres variables
+
+```{r}
+str(datos)
+summary(datos)
+
+# Verificar NAs en las variables de interés
+cat("\nVerificación de datos faltantes\n")
+cat("NAs en Brecha_salarial:", sum(is.na(datos$Brecha_salarial)), "\n")
+cat("NAs en PIB:", sum(is.na(datos$PIB)), "\n")
+cat("NAs en Tasa_participacion:", sum(is.na(datos$Tasa_participacion)), "\n")
+cat("NAs en Puestos_direccion:", sum(is.na(datos$Puestos_direccion)), "\n")
+cat("NAs en Poblacion_activa:", sum(is.na(datos$Poblacion_activa)), "\n\n")
+
+# Eliminar NAs si existen
+datos_clean <- datos %>% 
+  filter(!is.na(Brecha_salarial) & 
+         !is.na(PIB) & 
+         !is.na(Tasa_participacion) & 
+         !is.na(Puestos_direccion) & 
+         !is.na(Poblacion_activa))
+
+cat("Datos originales:", nrow(datos), "\n")
+cat("Datos después de limpiar:", nrow(datos_clean), "\n\n")
+
+# ANOVA: Brecha_salarial ~ PIB (categorizado)
+datos_clean$PIB_cat <- cut(datos_clean$PIB, 
+                           breaks = quantile(datos_clean$PIB, probs = c(0, 0.33, 0.67, 1)),
+                           labels = c("Bajo", "Medio", "Alto"),
+                           include.lowest = TRUE)
+
+cat("\nANOVA: Brecha_salarial ~ PIB\n")
+anova_pib <- aov(Brecha_salarial ~ PIB_cat, data = datos_clean)
+summary(anova_pib)
+
+# Medias por grupo
+medias_pib <- datos_clean %>% 
+  group_by(PIB_cat) %>% 
+  summarise(
+    n = n(),
+    Media_Brecha = mean(Brecha_salarial),
+    SD_Brecha = sd(Brecha_salarial)
+  )
+print(medias_pib)
+
+# ANOVA: Brecha_salarial ~ Tasa_participacion
+datos_clean$Tasa_part_cat <- cut(datos_clean$Tasa_participacion,
+                                  breaks = quantile(datos_clean$Tasa_participacion, probs = c(0, 0.33, 0.67, 1)),
+                                  labels = c("Baja", "Media", "Alta"),
+                                  include.lowest = TRUE)
+
+cat("\nANOVA: Brecha_salarial ~ Tasa_participacion\n")
+anova_tasa <- aov(Brecha_salarial ~ Tasa_part_cat, data = datos_clean)
+summary(anova_tasa)
+
+# Medias por grupo
+medias_tasa <- datos_clean %>% 
+  group_by(Tasa_part_cat) %>% 
+  summarise(
+    n = n(),
+    Media_Brecha = mean(Brecha_salarial),
+    SD_Brecha = sd(Brecha_salarial)
+  )
+print(medias_tasa)
+
+# ANOVA: Brecha_salarial ~ Puestos_direccion
+datos_clean$Puestos_dir_cat <- cut(datos_clean$Puestos_direccion,
+                                    breaks = quantile(datos_clean$Puestos_direccion, probs = c(0, 0.33, 0.67, 1)),
+                                    labels = c("Bajo", "Medio", "Alto"),
+                                    include.lowest = TRUE)
+
+cat("\nANOVA: Brecha_salarial ~ Puestos_direccion\n")
+anova_puestos <- aov(Brecha_salarial ~ Puestos_dir_cat, data = datos_clean)
+summary(anova_puestos)
+
+# Medias por grupo
+medias_puestos <- datos_clean %>% 
+  group_by(Puestos_dir_cat) %>% 
+  summarise(
+    n = n(),
+    Media_Brecha = mean(Brecha_salarial),
+    SD_Brecha = sd(Brecha_salarial)
+  )
+print(medias_puestos)
+
+# ANOVA: Brecha_salarial ~ Poblacion_activa
+datos_clean$Poblacion_cat <- cut(datos_clean$Poblacion_activa,
+                                  breaks = quantile(datos_clean$Poblacion_activa, probs = c(0, 0.33, 0.67, 1)),
+                                  labels = c("Baja", "Media", "Alta"),
+                                  include.lowest = TRUE)
+
+cat("\nANOVA: Brecha_salarial ~ Poblacion_activa\n")
+anova_poblacion <- aov(Brecha_salarial ~ Poblacion_cat, data = datos_clean)
+summary(anova_poblacion)
+
+# Medias por grupo
+medias_poblacion <- datos_clean %>% 
+  group_by(Poblacion_cat) %>% 
+  summarise(
+    n = n(),
+    Media_Brecha = mean(Brecha_salarial),
+    SD_Brecha = sd(Brecha_salarial)
+  )
+print(medias_poblacion)
+
+
+# Solo hacer Tukey si el ANOVA es significativo (p < 0.05)
+anova_pib_summary <- summary(anova_pib)
+if(!is.na(anova_pib_summary[[1]]$`Pr(>F)`[1]) && anova_pib_summary[[1]]$`Pr(>F)`[1] < 0.05) {
+  cat("\nComparaciones múltiples para PIB:\n")
+  tukey_pib <- TukeyHSD(anova_pib)
+  print(tukey_pib)
+}
+
+anova_tasa_summary <- summary(anova_tasa)
+if(!is.na(anova_tasa_summary[[1]]$`Pr(>F)`[1]) && anova_tasa_summary[[1]]$`Pr(>F)`[1] < 0.05) {
+  cat("\nComparaciones múltiples para Tasa de Participación:\n")
+  tukey_tasa <- TukeyHSD(anova_tasa)
+  print(tukey_tasa)
+}
+
+anova_puestos_summary <- summary(anova_puestos)
+if(!is.na(anova_puestos_summary[[1]]$`Pr(>F)`[1]) && anova_puestos_summary[[1]]$`Pr(>F)`[1] < 0.05) {
+  cat("\nComparaciones múltiples para Puestos de Dirección:\n")
+  tukey_puestos <- TukeyHSD(anova_puestos)
+  print(tukey_puestos)
+}
+
+anova_poblacion_summary <- summary(anova_poblacion)
+if(!is.na(anova_poblacion_summary[[1]]$`Pr(>F)`[1]) && anova_poblacion_summary[[1]]$`Pr(>F)`[1] < 0.05) {
+  cat("\nComparaciones múltiples para Población Activa:\n")
+  tukey_poblacion <- TukeyHSD(anova_poblacion)
+  print(tukey_poblacion)
+}
+
+cat("\nRESUMEN DE RESULTADOS ANOVA\n")
+
+resultados <- data.frame(
+  Variable = c("PIB", "Tasa_participacion", "Puestos_direccion", "Poblacion_activa"),
+  F_value = c(
+    summary(anova_pib)[[1]]$`F value`[1],
+    summary(anova_tasa)[[1]]$`F value`[1],
+    summary(anova_puestos)[[1]]$`F value`[1],
+    summary(anova_poblacion)[[1]]$`F value`[1]
+  ),
+  p_value = c(
+    summary(anova_pib)[[1]]$`Pr(>F)`[1],
+    summary(anova_tasa)[[1]]$`Pr(>F)`[1],
+    summary(anova_puestos)[[1]]$`Pr(>F)`[1],
+    summary(anova_poblacion)[[1]]$`Pr(>F)`[1]
+  ),
+  Significativo = c(
+    ifelse(summary(anova_pib)[[1]]$`Pr(>F)`[1] < 0.05, "Sí ***", "No"),
+    ifelse(summary(anova_tasa)[[1]]$`Pr(>F)`[1] < 0.05, "Sí ***", "No"),
+    ifelse(summary(anova_puestos)[[1]]$`Pr(>F)`[1] < 0.05, "Sí ***", "No"),
+    ifelse(summary(anova_poblacion)[[1]]$`Pr(>F)`[1] < 0.05, "Sí ***", "No")
+  )
+)
+
+print(resultados)
+
+cat("\n*** p < 0.05 indica que la variable SÍ tiene efecto significativo en la Brecha Salarial\n")
+```
+
+# Regresión simple entre el número de hombres con un salario mínimo vs el número de mujeres con un salario mínimo
+
+```{r}
+modelo_ingresos <- lm(Ingreso_min_mujeres ~ Ingreso_min_hombres, data = datos)
+summary(modelo_ingresos)
+
+cat("\nINTERPRETACIÓN DEL MODELO\n")
+cat("Variable dependiente (Y): Ingreso mínimo de mujeres\n")
+cat("Variable independiente (X): Ingreso mínimo de hombres\n\n")
+
+# Extraer coeficientes
+coef_ingresos <- summary(modelo_ingresos)$coefficients
+intercepto <- coef_ingresos[1, 1]
+pendiente <- coef_ingresos[2, 1]
+r_squared <- summary(modelo_ingresos)$r.squared
+r_squared_adj <- summary(modelo_ingresos)$adj.r.squared
+p_value <- coef_ingresos[2, 4]
+
+cat("\nECUACIÓN ESTIMADA\n")
+cat(sprintf("Ingreso_min_mujeres = %.4f + %.4f * Ingreso_min_hombres\n\n", 
+            intercepto, pendiente))
+
+cat("\nINTERPRETACIÓN DE COEFICIENTES\n")
+cat(sprintf("β₀ (Intercepto) = %.4f\n", intercepto))
+cat("   Cuando el ingreso mínimo de hombres es 0, el ingreso mínimo de mujeres\n")
+cat(sprintf("   sería de %.4f unidades (interpretación teórica)\n\n", intercepto))
+
+cat(sprintf("β₁ (Pendiente) = %.4f\n", pendiente))
+cat("   Por cada unidad adicional en el ingreso mínimo de hombres,\n")
+cat(sprintf("   el ingreso mínimo de mujeres cambia en %.4f unidades\n", pendiente))
+
+if(pendiente > 0 && pendiente < 1) {
+  cat("\n   ⚠️  HALLAZGO IMPORTANTE:\n")
+  cat("   La pendiente es positiva pero MENOR a 1, esto indica que:\n")
+  cat("   - Los ingresos de mujeres y hombres están positivamente relacionados\n")
+  cat("   - PERO los ingresos de mujeres crecen MENOS que los de hombres\n")
+  cat("   - Esto refleja la BRECHA SALARIAL de género\n")
+  cat(sprintf("   - Por cada peso que aumenta el ingreso de hombres,\n"))
+  cat(sprintf("     el ingreso de mujeres aumenta solo %.2f pesos\n", pendiente))
+} else if(pendiente >= 1) {
+  cat("\n   Los ingresos de mujeres crecen al mismo ritmo o más que los de hombres\n")
+} else {
+  cat("\n   ⚠️  Relación negativa o inusual\n")
+}
+
+cat(sprintf("R^2 = %.4f\n", r_squared))
+cat(sprintf("   El ingreso mínimo de hombres explica %.2f%% de la variabilidad\n", 
+            r_squared * 100))
+cat(sprintf("   en el ingreso mínimo de mujeres\n\n"))
+
+cat(sprintf("R^2 ajustado = %.4f\n", r_squared_adj))
+
+cat(sprintf("\nSIGNIFICANCIA ESTADÍSTICA\n"))
+cat(sprintf("p-value (pendiente) = %.6f ", p_value))
+
+if(p_value < 0.01) {
+  cat("***\n   La relación es ALTAMENTE SIGNIFICATIVA (p < 0.01)\n")
+} else if(p_value < 0.05) {
+  cat("**\n   La relación es SIGNIFICATIVA (p < 0.05)\n")
+} else if(p_value < 0.10) {
+  cat("*\n   La relación es MARGINALMENTE SIGNIFICATIVA (p < 0.10)\n")
+} else {
+  cat("\n   La relación NO es estadísticamente significativa (p > 0.10)\n")
+}
+
+# Calcular la brecha implícita
+brecha_implicita <- (1 - pendiente) * 100
+cat(sprintf("\n--- BRECHA SALARIAL IMPLÍCITA ---\n"))
+cat(sprintf("Brecha = %.2f%%\n", brecha_implicita))
+cat("   Esto significa que, en promedio, las mujeres ganan %.2f%% menos\n", brecha_implicita)
+cat("   que los hombres en términos de salario mínimo.\n")
+
+# Gráfico principal: Dispersión con línea de regresión
+ggplot(datos, aes(x = Ingreso_min_hombres, y = Ingreso_min_mujeres)) +
+  geom_point(color = "#E63946", alpha = 0.7, size = 4) +
+  geom_smooth(method = "lm", se = TRUE, color = "#457B9D", fill = "#457B9D", alpha = 0.2) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "gray40", size = 1) +
+  geom_text(aes(label = Año), hjust = -0.3, vjust = -0.3, size = 3, color = "gray30") +
+  labs(title = "Ingreso Mínimo: Mujeres vs Hombres",
+       subtitle = sprintf("Y = %.2f + %.2f*X | R^2 = %.4f | p = %.4f", 
+                         intercepto, pendiente, r_squared, p_value),
+       x = "Ingreso mínimo - Hombres",
+       y = "Ingreso mínimo - Mujeres",
+       caption = "Línea punteada: igualdad perfecta (45°)") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        plot.subtitle = element_text(color = "gray40", size = 10))
+
+# Tabla de predicciones
+predicciones <- data.frame(
+  Año = datos$Año,
+  Hombres_real = datos$Ingreso_min_hombres,
+  Mujeres_real = datos$Ingreso_min_mujeres,
+  Mujeres_predicho = valores_ajustados,
+  Residuo = residuos_ingresos,
+  Brecha_real = ((datos$Ingreso_min_hombres - datos$Ingreso_min_mujeres) / 
+                  datos$Ingreso_min_hombres) * 100
+)
+print(round(predicciones, 4))
+
+# Gráfico temporal comparativo
+ggplot(datos, aes(x = Año)) +
+  geom_line(aes(y = Ingreso_min_hombres, color = "Hombres"), size = 1.2) +
+  geom_point(aes(y = Ingreso_min_hombres, color = "Hombres"), size = 3) +
+  geom_line(aes(y = Ingreso_min_mujeres, color = "Mujeres"), size = 1.2) +
+  geom_point(aes(y = Ingreso_min_mujeres, color = "Mujeres"), size = 3) +
+  scale_color_manual(values = c("Hombres" = "#457B9D", "Mujeres" = "#E63946")) +
+  labs(title = "Evolución Temporal: Ingreso Mínimo por Género",
+       subtitle = "2015-2024",
+       x = "Año",
+       y = "Número de personas con salario mínimo",
+       color = "Género") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14),
+        legend.position = "bottom")
+
+# Gráfico de la brecha por año
+ggplot(predicciones, aes(x = Año, y = Brecha_real)) +
+  geom_col(fill = "#E63946", alpha = 0.8) +
+  geom_hline(yintercept = mean(predicciones$Brecha_real), 
+             linetype = "dashed", color = "#457B9D", size = 1.2) +
+  geom_text(aes(label = sprintf("%.1f%%", Brecha_real)), 
+            vjust = -0.5, size = 3, color = "gray30") +
+  labs(title = "Brecha Salarial de Género por Año",
+       subtitle = sprintf("Brecha promedio: %.2f%%", mean(predicciones$Brecha_real)),
+       x = "Año",
+       y = "Brecha (%)") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14))
+
+
+if(pendiente < 1 && p_value < 0.05) {
+  cat("✓ HALLAZGO CLAVE: Existe una relación significativa y positiva,\n")
+  cat("  PERO la pendiente menor a 1 confirma que las mujeres reciben\n")
+  cat("  sistemáticamente menos que los hombres.\n")
+}
+```
+
+## Resultados
+
+A. La Brecha salarial tiende a disminuir conforme disminuye el ingreso promedio. Siendo los estados del sur (Chiapas, Oaxaca, Guerrero) los que tienen el menor ingreso y la menos brecha salarial (como se observa en las tablas de bottom).
+
+B. La brecha salarial no se ha reducido significativamente a lo largo de los años 2015- 2024, tuvo una caida significativa en la pandemia, reforzando la declaración anterior donde a menor ingreso menor brecha.
+
+C. A partir del análisis de las variables de manera independiente se concluye que la variable que mejor explica la Brecha Salarial es la Población Económicamente Activa seguida por la Tasa de Participación, tienen una relación positiva. La única variable con una relación negativa (mientras aumenta, la Brecha Salarial disminuye) son Mujeres en Puestos Directivos pero el error estándar es muy grande.
+
+D. El modelo original presenta una colinealidad perfecta, a pesar de las pruebas posteriores no resulta importante debido al problema estructural del modelo.
+
+E. Este nuevo modelo presenta una mejora, ahora el modelo es significativo (p-valor = 0.02441) . Con este nuevo modelo Mujeres en Puestos Directivos es la variable más significativa contradiciendose con las regresiones simples hechas al principio del proyecto.
+
+F. Los modelos son homocedásticos.
+
+## Conclusiones
+
+El desarrollo de este análisis nos permitió identificar los factores socioeconómicos que influyen en la brecha salarial de género en México además de evaluar la consistencia estadística de distintos modelo y aunque varias variables mostraron relaciones significativas de manera individual nuestro modelo enfrentó problemas de colinealidad que limitaron su capacidad explicativa lo que obligó a replantear su estructura y a estimar versiones alternativas con mejor estabilidad estadística.
+
+Con el desarrollo de este trabajo se logra evidenciar los fenómenos sociales, como la brecha salarial de género que pueden ser estudiados mediante herramientas técnicas estadísticas y econometricas, permitiendo cuantificar relaciones que muchas veces se perciben únicamente desde una perspectiva social o política y la brecha salarial que es un problema real y persistente que requiere un análisis más riguroso donde se pueda sustentar la toma de decisiones en materia de igualdad laboral.
+
+## Referencias
+
+(S/f-a). Scribbr.com. Recuperado el 3 de noviembre de 2025, de https://www.scribbr.com/statistics/simple-linear-regression/
+
+Hayes, A. (2008, marzo 16). *Multiple linear regression (MLR): Definition, formula, and example*. Investopedia. https://www.investopedia.com/terms/m/mlr.asp
+
+de Hacienda, M. (s/f). *Cobb-Douglas*. Hacienda.cl. Recuperado el 3 de noviembre de 2025, de https://old.hacienda.cl/glosario/cobb-douglas.html
+
+Hayes, A. (2007, mayo 28). *Error term: Definition, example, and how to calculate with formula*. Investopedia. https://www.investopedia.com/terms/e/errorterm.asp}
+
+El estadístico de Anderson-Darling. (s/f). Minitab.com. Recuperado el 21 de noviembre de 2025, de https://support.minitab.com/es-mx/minitab/help-and-how-to/statistics/basic-statistics/supporting-topics/normality/the-anderson-darling-statistic/
+
+Que es la Colinealidad y Multicolinealidad y como saber si nuestras variables son colineales o multicolineales entre sí. (s/f). Com.co. Recuperado el 21 de noviembre de 2025, de https://siepsi.com.co/2024/02/23/que-es-la-colinealidad-y-multicolinealidad-y-como-saber-si-nuestras-variables-son-colineales-o-multicolineales-entre-si/
+
+(S/f). Quora.com. Recuperado el 21 de noviembre de 2025, de https://www.quora.com/What-is-Ramsey-RESET-test
+
+(S/f). Bancosantander.es. Recuperado el 2 de noviembre de 2025, de https://www.bancosantander.es/glosario/pib-producto-interior-bruto
+
+Claudia, M., & Corichi García, S. (s/f). PRESUPUESTOS CON PERSPECTIVA DE GÉNERO. Gob.mx. Recuperado el 22 de noviembre de 2025, de https://www.asf.gob.mx/uploads/54_Informes_y_publicaciones/PPG_CC08ABR19.pdf
+
+(S/f-b). Gob.mx. Recuperado el 22 de noviembre de 2025, de https://indicadoresdegenero.semujeres.cdmx.gob.mx/indicadores/indicadores-estrategicos /tasa-de-participacion-de-mujeres-y-hombres-en-el-mercado-laboral
+
+Axtle Ortiz, M. Á., & Caro-Guzmán, L. (2017). La presencia de las mujeres en posiciones directivas. The Anáhuac journal, 17(2), 53–92. https://doi.org/10.36105/theanahuacjour.2017v17n2.03
+
+De hogares y su población, D. P., & De ingresos por trabaj o, S. G. (s/f). Ingresos en los hogares. Org.mx. Recuperado el 22 de noviembre de 2025, de https://www.inegi.org.mx/contenidos/productos/prod_serv/contenidos/espanol/bvinegi/productos/historicos/2104/702825496661/702825496661_18.pdf
+
+*Base de datos*
+
+World Bank Open Data. (s. f.). World Bank Open Data. https://datos.bancomundial.org/indicador/NY.GDP.MKTP.CD
+
+World Bank Open Data. (s. f.-b). World Bank Open Data. https://datos.bancomundial.org/indicator/SL.TLF.ACTI.FE.ZS?end=2024&start=2024&view=bar
+
+Gobierno de México. (2015-2025). Presupuesto de Egresos de la Federación para el ejercicio fiscal de \[2015-2025\]. Diario Oficial de la Federación. https://www.dof.gob.mx/#gsc.tab=0
+
+(S/f). Oecd.org. Recuperado el 3 de noviembre de 2025, de https://www.oecd.org/en/data/indicators/gender-wage-gap.html
+
+Vasal, V. (s/f). *Women in Business 2025*. Grant Thornton International Ltd. Home. Recuperado el 3 de noviembre de 2025, de https://www.grantthornton.global/en/insights/women-in-business/women-in-business-2025/
+
+Instituto Nacional de Estadística y Geografía (INEGI). (1998, enero 1). Banco de indicadores. Instituto Nacional de Estadística y Geografía. INEGI. https://www.inegi.org.mx/app/indicadores/?ind=6207079644&tm=6
